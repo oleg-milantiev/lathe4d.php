@@ -247,10 +247,15 @@ class Lathe4d
 	 */
 	private function aTo360()
 	{
-		$this->zToSafe();
-		
-		$this->a = ceil($this->a / 360) * 360;
-		return "G0 A{$this->a}\n";
+		$ret = $this->zToSafe();
+
+		if ($this->a != (ceil($this->a / 360) * 360)) {
+			$this->a = ceil($this->a / 360) * 360;
+
+			$ret .= "G0 A{$this->a}\n";
+		}
+
+		return $ret;
 	}
 
 

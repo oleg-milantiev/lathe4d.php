@@ -1,5 +1,5 @@
 ( File created by Lathe4d.php )
-( 02-01-2020 23:16 )
+( 03-01-2020 01:05 )
 G0 Z28
 (Current cutter 6мм концевая трёхпёрая по дюралю)
 ( Cylinder Y[0..48] D[36..17]=R[18..8.5] )
@@ -43,6 +43,13 @@ G1 Y45 A1270
 G1 A1630
 G0 Z28
 G0 A1800
+G92 A0
+( Cut[51] D[36..0]=R[18..0] )
+G0 A0 Y51
+G1 Z18 F1400
+G1 A2160 Z0
+G1 A2520
+G0 Z28
 G92 A0
 T1
 M5      (Spindle stop.)
@@ -151,4 +158,18 @@ G1 Y31 A0
 G1 A-10
 G0 Z28
 G0 A-0
+G92 A0
+T1
+M5      (Spindle stop.)
+(MSG, Change tool to 6мм концевая трёхпёрая по дюралю)
+M6      (Tool change.)
+M0      (Temporary machine stop.)
+M3      (Spindle on clockwise.)
+( Cut[-3] D[36..2]=R[18..1] )
+G0 A0 Y-3
+G1 Z18 F1400
+G1 A2040 Z1
+G1 A2400
+G0 Z28
+G0 A2520
 G92 A0
