@@ -364,6 +364,52 @@ class Lathe4d
 	}
 
 
+	/**
+	 * Обрезать мусор справа. Режет до dEnd. Если не задал, то до нуля
+	 */
+	public function cutRight($y, $dBegin, $dEnd = 0)
+	{
+		return $this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd);
+	}
+
+	/**
+	 * Обрезать деталь слева. Режет до dEnd. Если не задал, то до нуля
+	 */
+	public function cutLeft($y, $dBegin, $dEnd = 0)
+	{
+		return $this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd);
+	}
+
+	private function cut($y, $dBegin, $dEnd)
+	{
+		$ret = "( Cut[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+
+		$ret .= $this->zToSafe();
+
+		$this->y = $y;
+		$ret .= "G0 A0 Y{$this->y}\n";
+
+		$this->z = $dBegin/2;
+		$ret .= "G1 Z{$this->z} F{$this->cutter->getFeed()}\n";
+		# Фрезу подвели к началу
+
+		$this->z = $dEnd/2;
+		$this->a = ($dBegin/2 - $dEnd/2) / $this->cutter->getPassDepth() * 360;
+		$ret .= "G1 A{$this->a} Z{$this->z}\n";
+		# Спиралью опустил до $dEnd
+
+		$this->a += 360;
+		$ret .= "G1 A{$this->a}\n";
+		# Круг почёта на месте
+
+		$ret .= $this->zToSafe();
+		$ret .= $this->aTo360();
+		$ret .= $this->aReset();
+
+		return $ret;
+	}
+
+
 	public function end()
 	{
 	}
@@ -377,12 +423,13 @@ class Lathe4d
 	private function zToSafe()
 	{
 		if ($this->isSafeZ()) {
-			return '';
+			return;
 		}
 
 		$this->z = $this->blank->getRadius() + $this->safe;
+		# ex: заготовка 50/2 + safe 10 = 35
 
-		return "G0 Z{$this->z}\n";				# заготовка 50/2 + safe 10
+		return "G0 Z{$this->z}\n";
 	}
 
 
