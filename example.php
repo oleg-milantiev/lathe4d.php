@@ -10,12 +10,24 @@ $lathe->setBlank(
 );
 $lathe->setSafe(10);		# Безопасная высота 10мм
 
-$cutter = new cutter();
+$cutter = new Cutter();
 $cutter->setDiameter(6);	# Диаметр фрезы 6мм
 $cutter->setPassDepth(3);	# Заглубление за раз 3мм
 $cutter->setStepover(0.8);	# 80% шаг по Y от диаметра фрезы
 $cutter->setFeed(1400);		# Подача 1400 мм/мин
-$cutter->setName('6мм концевая трёхпёрая по дюралю');		# Имя фрезы
+$cutter->setName('6mm endmill 3fluite alluminium');		# Имя фрезы
+$cutter->setTool(1);		# Номер инструмента (фрезы)
+
+/* альтернативная запись (можно включать не все параметры)
+$cutter = new Cutter([
+	'diameter'  => 6,
+	'passDepth' => 3,
+	'stepover'  => 0.8,
+	'feed'      => 1400,
+	'name'      => '6mm endmill 3fluite alluminium',
+	'tool'      => 1,
+]);
+*/
 
 echo $lathe->start();		# Начальные g-code команды
 
@@ -34,6 +46,7 @@ $engraver = new cutter();
 $engraver->setPassDepth(0.1);
 $engraver->setFeed(1400);
 $engraver->setName('Гравёр 60°');		# Имя фрезы
+$engraver->setTool(2);					# Номер фрезы
 
 echo $lathe->setCutter($engraver);
 

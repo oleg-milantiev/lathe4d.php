@@ -32,14 +32,15 @@ class Cutter
 	private $stepover;
 	private $feed;
 	private $name;
+	private $tool;
 
-	public function Cutter($diameter = null, $passDepth = null, $stepover = null, $feed = null, $name = null)
+	public function Cutter($params = [])
 	{
-		$this->diameter  = $diameter;
-		$this->passDepth = $passDepth;
-		$this->stepover  = $stepover;
-		$this->feed      = $feed;
-		$this->name      = $name;
+		foreach (['diameter', 'passDepth', 'stepover', 'feed', 'name', 'tool'] as $field) {
+			if (isset($params[$field]) {
+				$this->{$field} = $params['field'];
+			}
+		}
 	}
 
 	public function setDiameter($diameter)
@@ -75,6 +76,16 @@ class Cutter
 	public function getFeed()
 	{
 		return $this->feed;
+	}
+
+	public function setTool($tool)
+	{
+		$this->tool = $tool;
+	}
+
+	public function getTool()
+	{
+		return $this->tool;
 	}
 
 	public function setStepover($stepover)
@@ -128,7 +139,7 @@ class Lathe4d
 			# Смена фрезы, а не первая фреза
 
 			// @todo Поднять повыше. Шоб удобней фрезу менять было
-			$ret .= "T1\n";
+			$ret .= "T{$cutter->getTool()}\n";
 			$ret .= "M5      (Spindle stop.)\n";
 			$ret .= "(MSG, Change tool to {$cutter->getName()})\n";
 			$ret .= "M6      (Tool change.)\n";
@@ -136,7 +147,9 @@ class Lathe4d
 			$ret .= "M3      (Spindle on clockwise.)\n";
 		}
 		else {
+			$ret .= "T{$cutter->getTool()}\n";
 			$ret .= "(Current cutter {$cutter->getName()})\n";
+			$ret .= "M6      (Tool change.)\n";
 		}
 
 		$this->cutter = $cutter;
@@ -165,6 +178,12 @@ class Lathe4d
 
 		$ret .= "( File created by Lathe4d.php )\n";
 		$ret .= "( ". date('d-m-Y H:i') ." )\n";
+
+		# @todo пока взял шапку из aspire for mach3. Потом вынесу наружу
+		$ret .= "G00G21G17G90G40G49G80\n";
+		$ret .= "G71G91.1\n";
+		$ret .= "S18000M3\n"; // @todo скорость шпинделя в cutter
+		$ret .= "G94\n";
 
 		$ret .= $this->zToSafe();
 
@@ -417,6 +436,10 @@ class Lathe4d
 
 	public function end()
 	{
+		$ret = "M09\n";
+		$ret .= "M30\n";
+
+		return $ret;
 	}
 
 
