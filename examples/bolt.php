@@ -5,7 +5,7 @@
  * @todo шестигранник под ключ, как будет реализован в библиотеке
  */
 
-include "lathe4d.php";
+include "../lathe4d.php";
 
 $lathe = new Lathe4d();
 

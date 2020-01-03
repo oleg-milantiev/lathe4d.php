@@ -1,6 +1,6 @@
 <?php
 
-include "lathe4d.php";
+include "../lathe4d.php";
 
 $lathe = new Lathe4d();
 
