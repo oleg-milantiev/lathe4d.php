@@ -1,0 +1,1 @@
+@c:\portable\php\php %*
