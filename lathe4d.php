@@ -37,7 +37,7 @@ class Cutter
 	public function Cutter($params = [])
 	{
 		foreach (['diameter', 'passDepth', 'stepover', 'feed', 'name', 'tool'] as $field) {
-			if (isset($params[$field]) {
+			if (isset($params[$field])) {
 				$this->{$field} = $params['field'];
 			}
 		}

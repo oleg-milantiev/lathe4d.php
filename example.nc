@@ -1,7 +1,13 @@
 ( File created by Lathe4d.php )
-( 03-01-2020 01:05 )
+( 03-01-2020 03:50 )
+G00G21G17G90G40G49G80
+G71G91.1
+S18000M3
+G94
 G0 Z28
-(Current cutter 6мм концевая трёхпёрая по дюралю)
+T1
+(Current cutter 6mm endmill 3fluite alluminium)
+M6      (Tool change.)
 ( Cylinder Y[0..48] D[36..17]=R[18..8.5] )
 G0 A0 X0 Y3
 G1 Z18 F1400
@@ -51,7 +57,7 @@ G1 A2160 Z0
 G1 A2520
 G0 Z28
 G92 A0
-T1
+T2
 M5      (Spindle stop.)
 (MSG, Change tool to Гравёр 60°)
 M6      (Tool change.)
@@ -161,7 +167,7 @@ G0 A-0
 G92 A0
 T1
 M5      (Spindle stop.)
-(MSG, Change tool to 6мм концевая трёхпёрая по дюралю)
+(MSG, Change tool to 6mm endmill 3fluite alluminium)
 M6      (Tool change.)
 M0      (Temporary machine stop.)
 M3      (Spindle on clockwise.)
@@ -173,3 +179,5 @@ G1 A2400
 G0 Z28
 G0 A2520
 G92 A0
+M09
+M30
