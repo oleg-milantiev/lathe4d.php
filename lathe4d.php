@@ -8,7 +8,7 @@ class Blank
 	private $diameter;
 	private $length;
 
-	public function Blank($diameter, $length = -1)
+	public function __construct($diameter, $length = -1)
 	{
 		$this->diameter = $diameter;
 		$this->length   = $length;
@@ -34,11 +34,11 @@ class Cutter
 	private $name;
 	private $tool;
 
-	public function Cutter($params = [])
+	public function __construct($params = [])
 	{
 		foreach (['diameter', 'passDepth', 'stepover', 'feed', 'name', 'tool'] as $field) {
 			if (isset($params[$field])) {
-				$this->{$field} = $params['field'];
+				$this->{$field} = $params[$field];
 			}
 		}
 	}
@@ -287,7 +287,7 @@ class Lathe4d
 		if ($this->a == (ceil($this->a / 360) * 360) ) {
 			$this->a = 0;
 
-			return "G92 A0\n";
+			return "G92 A 0\n";
 		}
 	}
 
@@ -332,21 +332,21 @@ class Lathe4d
 			if ($this->y == $yEnd) {
 				# обратный ход
 
-				#1: y=end, a=360 + резьба + 10
+				#1: y=end, a=2x360 + резьба + 10
 				$this->a -= 10;
-				#2: y=end, a=360 + резьба
+				#2: y=end, a=2x360 + резьба
 				$ret .= "G1 Z{$this->z} A{$this->a}\n";	# врезание до заданной глубины на A-=10
 
 				$this->a -= 360;
-				#2: y=end, a=резьба
+				#2: y=end, a=360 + резьба
 				$ret .= "G1 A{$this->a}\n";	# кружок на месте налево
 
 				$this->y = $yBegin;				# погнали налево крутя, ехать к началу
-				$this->a = 0;
-				#2: y=begin, a=0
+				$this->a = 360;
+				#2: y=begin, a=360
 				$ret .= "G1 Y{$this->y} A{$this->a}\n";	# крутим резьбу налево
 
-				$this->a -= 10;				# лишние 10° проскочим налево для следующего врезания
+				$this->a = -10;				# круг на месте и лишние 10° - для следующего врезания
 				#2: y=begin, a=-10
 				$ret .= "G1 A{$this->a}\n";
 			}
@@ -362,17 +362,13 @@ class Lathe4d
 				#1: y=begin, a=360
 				$ret .= "G1 A{$this->a}\n";		# кружок на месте
 
-				#1: a=360
-				$ret .= $this->aReset();
-				#1: a=0
-
 				$this->y = $yEnd;
 				$this->a += ($yEnd - $yBegin) / $yStep * 360;
-				#1: y=end, a=резьба
+				#1: y=end, a=360 + резьба
 				$ret .= "G1 Y{$this->y} A{$this->a}\n";	# крутим резьбу
 
 				$this->a += 370;
-				#1: y=end, a=360 + резьба + 10
+				#1: y=end, a=2x360 + резьба + 10
 				$ret .= "G1 A{$this->a}\n";			# кружок на месте и ещё 10° для врезания потом
 			}
 
@@ -381,8 +377,6 @@ class Lathe4d
 		# Конец
 
 		$ret .= $this->zToSafe();
-		$ret .= $this->aTo360();
-		$ret .= $this->aReset();
 
 		return $ret;
 	}
@@ -393,7 +387,11 @@ class Lathe4d
 	 */
 	public function cutRight($y, $dBegin, $dEnd = 0)
 	{
-		return $this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd);
+		$ret = "( CutRight[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+
+		$ret .= $this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd);
+
+		return $ret;
 	}
 
 	/**
@@ -401,12 +399,16 @@ class Lathe4d
 	 */
 	public function cutLeft($y, $dBegin, $dEnd = 0)
 	{
-		return $this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd);
+		$ret = "( CutLeft[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+
+		$ret .= $this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd);
+
+		return $ret;
 	}
 
 	private function cut($y, $dBegin, $dEnd)
 	{
-		$ret = "( Cut[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+		$ret = '';
 
 		$ret .= $this->zToSafe();
 
