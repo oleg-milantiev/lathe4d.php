@@ -31,12 +31,13 @@ class Cutter
 	private $passDepth;
 	private $stepover;
 	private $feed;
+	private $plunge; // @todo Пока не используется
 	private $name;
 	private $tool;
 
 	public function __construct($params = [])
 	{
-		foreach (['diameter', 'passDepth', 'stepover', 'feed', 'name', 'tool'] as $field) {
+		foreach (['diameter', 'passDepth', 'stepover', 'feed', 'name', 'tool', 'plunge'] as $field) {
 			if (isset($params[$field])) {
 				$this->{$field} = $params[$field];
 			}
@@ -78,6 +79,16 @@ class Cutter
 		return $this->feed;
 	}
 
+	public function setPlunge($plunge)
+	{
+		$this->plunge = $plunge;
+	}
+
+	public function getPlunge()
+	{
+		return $this->plunge;
+	}
+
 	public function setTool($tool)
 	{
 		$this->tool = $tool;
@@ -117,7 +128,10 @@ class Cutter
 class Lathe4d
 {
 
+	/** @var Blank */
 	private $blank;
+
+	/** @var Cutter */
 	private $cutter;
 	private $safe;
 
@@ -125,6 +139,32 @@ class Lathe4d
 	private $y = 0;
 	private $z = 0;
 	private $a = 0;
+
+
+	/** @var string Уровень подробности логов */
+	private $verbose;
+
+	public static $VERBOSE_QUIET = 'quiet';
+	public static $VERBOSE_INFO  = 'info';
+	public static $VERBOSE_DEBUG = 'debug';
+
+
+	public function __construct($verbose = null)
+	{
+		$this->verbose = $verbose ? $verbose : self::$VERBOSE_QUIET;
+	}
+
+
+	private function isDebug()
+	{
+		return !! ($this->verbose == self::$VERBOSE_DEBUG);
+	}
+
+	private function isInfo()
+	{
+		return in_array($this->verbose, [self::$VERBOSE_DEBUG, self::$VERBOSE_INFO]);
+	}
+
 
 	public function setBlank(Blank $blank)
 	{
@@ -168,10 +208,10 @@ class Lathe4d
 	public function start()
 	{
 		if (!$this->blank) {
-			die('Заготовка не задана');
+			die('ERROR: Blank not defined');
 		}
 		if (!$this->safe) {
-			die('Safe Z не задан');
+			die('ERROR: Safe Z not defined');
 		}
 
 		$ret = '';
@@ -191,22 +231,168 @@ class Lathe4d
 	}
 
 
+	public static $HEXAGON_CYLINDER_SHARP = 1.155;
+	public static $HEXAGON_CYLINDER_SOFT  = 1.115;
+
+	/**
+	 * Шестигранная голова болта
+	 * Основа болта - цилиндр диаметра dSize*1.155 для острых граней. Или ~*1.115 с фасками
+	 * 				- можно и больше цилиндр. Схавает так, как надо, без остатка и без жадности
+	 *
+	 * @param $yBegin float Начальная координата Y площадки
+	 * @param $yEnd float Конечная координата Y площадки
+	 * @param $dBegin float Начальный диаметр реза
+	 * @param $dEnd float Размер ключа, например, 12.8 под 13й
+	 * @param $aStart float Угол первой плоскости (0 по умолчанию)
+	 *
+	 * @todo далёкие планы - переделка на iMaching справа. Попутное или встречное (щас вперемешку)
+	 */
+	public function hexagon($yBegin, $yEnd, $dBegin, $dEnd, $aStart = 0)
+	{
+		if (!$this->cutter) {
+			die('ERROR: Cutter not defined');
+		}
+
+		if (($yEnd - $yBegin) < $this->cutter->getDiameter()) {
+			die('ERROR: Cutter cant fit into hexagon length');
+		}
+
+		$ret = "( Hexagon Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] ". (($aStart) ? ('A['. $aStart .'] '): '') .")\n";
+
+		$ret .= $this->zToSafe();
+
+		if ($this->a != $aStart) {
+			$this->a = $aStart;
+
+			$ret .= "G0 A{$aStart}\n";
+		}
+
+		# Слева режем точно до грани болта
+		# Правая и левая координаты грани болта на уровне dEnd
+		$xRightBolt = $dEnd/2 * tan(pi() / 6);
+		$xLeftBolt  = -$xRightBolt;
+
+		# 6 граней
+		for ($face = 1; $face <= 6; $face ++) {
+
+			if ($this->isInfo()) {
+				$ret .= "( Hexagon - Face #{$face} )\n";
+			}
+
+			$this->z = $dBegin / 2;
+
+			do {
+
+				$this->z -= $this->cutter->getPassDepth();
+
+				if ($this->z < ($dEnd / 2)) {
+					# последний проход
+					$this->z = $dEnd / 2;
+				}
+
+				# определю граничные условия цилиндра dBegin по X на этой высоте
+				$xLeft = -sqrt($dBegin / 2 * $dBegin / 2 - $this->z * $this->z);
+
+				# Слева не режу дальше грани болта
+				if ($xLeft < $xLeftBolt) {
+					$xLeft = $xLeftBolt;
+				}
+
+				# Правая граница цилиндра dBegin по X на этой высоте
+				$xRight = sqrt($dBegin / 2 * $dBegin / 2 - $this->z * $this->z);
+
+//				# Левый срез следующей грани
+//				$xRightNext = $xRightBolt + tan(pi() / 3) * ($this->z - $dEnd / 2);
+//
+//				# Не нужно резать дальше следующей грани.
+//				if ($xRight > $xRightNext) {
+//					$xRight = $xRightNext;
+//				}
+
+				if ($this->isDebug()) {
+					$ret .= "( Hexagon - Face #{$face} - Square X[{$xLeft}..{$xRight}] Y[{$yBegin}..{$yEnd}] Z[{$this->z}] )\n";
+				}
+
+				# Врезание справа, правее цилиндра подвести и погнали налево
+				$this->x = $xRight + $this->cutter->getRadius();
+				$this->y = $yBegin + $this->cutter->getRadius();
+
+				$ret .= "G0 X{$this->x} Y{$this->y}\n";
+				$ret .= "G1 Z{$this->z} F{$this->cutter->getFeed()}\n";
+
+				$this->y -= $this->cutter->getStepoverMm();
+
+				# Цикл по Y
+				do {
+					$this->y += $this->cutter->getStepoverMm();
+
+					if ($this->y > ($yEnd - $this->cutter->getRadius())) {
+						# Последний проход
+						$this->y = $yEnd - $this->cutter->getRadius();
+					}
+
+					// @todo за чистоту кода просится wasY и анализ его изменений (лишний кот)
+					$ret .= "G1 Y{$this->y}\n";
+
+					if ($this->x == ($xLeft + $this->cutter->getRadius())) {
+						# девочки направо
+						$this->x = $xRight - $this->cutter->getRadius();
+					}
+					else {
+						# мальчики налево
+						$this->x = $xLeft + $this->cutter->getRadius();
+					}
+
+					$ret .= "G1 X{$this->x}\n";
+
+				} while ($this->y != ($yEnd - $this->cutter->getRadius()));
+
+			} while ($this->z != ($dEnd/2));
+
+			$ret .= $this->zToSafe();
+
+			$this->a += 60;
+			$ret .= "G0 A{$this->a}\n";
+		}
+
+		$ret .= $this->aTo360();
+		$ret .= $this->aReset();
+
+		return $ret;
+	}
+
+
 	/**
 	 * Цилиндр
 	 *
-	 * @params $yBegin float Начальный размер цилиндра (меньший, ex: 0)
-	 * @params $yEnd float Конечный размер цилиндра (больший, ex: 10)
-	 * @params $dBegin float Начальный диаметр (больший, ex: 50)
-	 * @params $dEnd float Конечный диаметр (меньший, ex: 40)
+	 * @param $yBegin float Начальный размер цилиндра (меньший, ex: 0)
+	 * @param $yEnd float Конечный размер цилиндра (больший, ex: 10)
+	 * @param $dBegin float Начальный диаметр (больший, ex: 50)
+	 * @param $dEnd float Конечный диаметр (меньший, ex: 40)
 	 * @todo сделать пофик порядок начальных / конечных D и Y
 	 */
 	public function cylinder($yBegin, $yEnd, $dBegin, $dEnd)
 	{
 		if (!$this->cutter) {
-			die('Фреза не задана');
+			die('ERROR: Cutter not defined');
+		}
+
+		if (($yEnd - $yBegin) < $this->cutter->getDiameter()) {
+			die('ERROR: Cutter cant fit into cylinder length');
 		}
 
 		$ret = "( Cylinder Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+
+		if (($yEnd - $yBegin) == $this->cutter->getDiameter()) {
+			# Цилиндр через cutRight, а не cylinder из-за совпадения yRange с dCutter - так быстрее
+			if ($this->isInfo()) {
+				$ret .= "( Cylinder - Optimized to CutRight )\n";
+			}
+
+			$ret .= $this->cutRight($yBegin, $dBegin, $dEnd);
+
+			return $ret;
+		}
 
 		$ret .= $this->zToSafe();
 
@@ -263,6 +449,7 @@ class Lathe4d
 
 	/**
 	 * Докручивает ось A до кратного 360 вперёд
+	 * @todo Параметр - докручивать направо, налево или куда ближе
 	 */
 	private function aTo360()
 	{
@@ -295,16 +482,20 @@ class Lathe4d
 	/**
 	 * Резьба гравёром
 	 * 
-	 * @params $yBegin float Начальный размер цилиндра (меньший, ex: 0)
-	 * @params $yEnd float Конечный размер цилиндра (больший, ex: 10)
-	 * @params $yStep float|string Или именование резьбы ex: 'M15x1.5', или шаг резьбы
-	 * @params $dBegin float|null Или начальный диаметр, или пусто, если резьба задана строкой
-	 * @params $dEnd null|float Или конечный диаметр, или пусто, если резьба задана строкой
+	 * @param $yBegin float Начальный размер цилиндра (меньший, ex: 0)
+	 * @param $yEnd float Конечный размер цилиндра (больший, ex: 10)
+	 * @param $yStep float|string Или именование резьбы ex: 'M15x1.5', или шаг резьбы
+	 * @param $dBegin float|null Или начальный диаметр, или пусто, если резьба задана строкой
+	 * @param $dEnd null|float Или конечный диаметр, или пусто, если резьба задана строкой
 	 */
 	public function thread($yBegin, $yEnd, $yStep, $dBegin = null, $dEnd = null)
 	{
+		if (!$this->cutter) {
+			die('ERROR: Cutter not defined');
+		}
+
 		if ( (gettype($yStep) == 'string') and preg_match('#M([0-9.]+)x([0-9.]+)#', $yStep, $out) ) {
-			$dBegin = $out[1] * 2 - 0.1;			# M15x1.5 -> 14.9
+			$dBegin = $out[1] - 0.1;			# M15x1.5 -> 14.9
 			$dEnd   = $dBegin - $out[2] * 1.3;		# M15x1.5 -> 27.95
 			$yStep  = $out[2];
 		}
@@ -387,7 +578,7 @@ class Lathe4d
 	 */
 	public function cutRight($y, $dBegin, $dEnd = 0)
 	{
-		$ret = "( CutRight[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+		$ret = "( CutRight Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
 
 		$ret .= $this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd);
 
@@ -399,9 +590,18 @@ class Lathe4d
 	 */
 	public function cutLeft($y, $dBegin, $dEnd = 0)
 	{
-		$ret = "( CutLeft[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+		$ret = "( CutLeft Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
 
 		$ret .= $this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd);
+
+		return $ret;
+	}
+
+	public function cutCenter($y, $dBegin, $dEnd = 0)
+	{
+		$ret = "( CutCenter Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+
+		$ret .= $this->cut($y, $dBegin, $dEnd);
 
 		return $ret;
 	}
@@ -470,6 +670,40 @@ class Lathe4d
 	private function isSafeZ()
 	{
 		return !! ($this->z == ($this->blank->getRadius() + $this->safe));
+	}
+
+
+	// Для G0 / G1 предыдущие значения переходов
+	private $wasX;
+	private $wasY;
+	private $wasZ;
+	private $wasA;
+
+	private function G($mode = '0')
+	{
+		$ret = 'G'. $mode;
+
+		if ($this->wasX != $this->x) {
+			$this->wasX = $this->x;
+			$ret .= ' X'. $this->x;
+		}
+
+		if ($this->wasY != $this->y) {
+			$this->wasY = $this->y;
+			$ret .= ' Y'. $this->y;
+		}
+
+		if ($this->wasZ != $this->z) {
+			$this->wasZ = $this->z;
+			$ret .= ' Z'. $this->z;
+		}
+
+		if ($this->wasA != $this->a) {
+			$this->wasA = $this->a;
+			$ret .= ' A'. $this->a;
+		}
+
+		return $ret ."\n";
 	}
 
 }
