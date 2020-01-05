@@ -176,6 +176,11 @@ class Lathe4d
 		$ret = '';
 
 		if ($this->cutter) {
+			# Не менять шило на мыло (фрезу с тем же именем)
+			if ($this->cutter->getName() == $cutter->getName()) {
+				return;
+			}
+
 			# Смена фрезы, а не первая фреза
 
 			// @todo Поднять повыше. Шоб удобней фрезу менять было
@@ -231,8 +236,8 @@ class Lathe4d
 	}
 
 
-	public static $HEXAGON_CYLINDER_SHARP = 1.155;
-	public static $HEXAGON_CYLINDER_SOFT  = 1.115;
+	public static $HEXAGON_SHARP = 1.155;
+	public static $HEXAGON_SOFT  = 1.115;
 
 	/**
 	 * Шестигранная голова болта
@@ -334,13 +339,13 @@ class Lathe4d
 					// @todo за чистоту кода просится wasY и анализ его изменений (лишний кот)
 					$ret .= "G1 Y{$this->y}\n";
 
-					if ($this->x == ($xLeft + $this->cutter->getRadius())) {
+					if ($this->x == $xLeft) {
 						# девочки направо
-						$this->x = $xRight - $this->cutter->getRadius();
+						$this->x = $xRight;
 					}
 					else {
 						# мальчики налево
-						$this->x = $xLeft + $this->cutter->getRadius();
+						$this->x = $xLeft;
 					}
 
 					$ret .= "G1 X{$this->x}\n";
@@ -479,6 +484,10 @@ class Lathe4d
 	}
 
 
+	public static $THREAD_RIGHT = -1;
+	public static $THREAD_LEFT  = 1;
+
+
 	/**
 	 * Резьба гравёром
 	 * 
@@ -488,7 +497,7 @@ class Lathe4d
 	 * @param $dBegin float|null Или начальный диаметр, или пусто, если резьба задана строкой
 	 * @param $dEnd null|float Или конечный диаметр, или пусто, если резьба задана строкой
 	 */
-	public function thread($yBegin, $yEnd, $yStep, $dBegin = null, $dEnd = null)
+	public function thread($yBegin, $yEnd, $yStep, $direction = -1, $dBegin = null, $dEnd = null)
 	{
 		if (!$this->cutter) {
 			die('ERROR: Cutter not defined');
@@ -504,7 +513,7 @@ class Lathe4d
 
 		$ret .= $this->zToSafe();
 
-		$this->a = -10;
+		$this->a = -10 * $direction;
 		$this->y = $yBegin;
 		#1:
 		$ret .= "G0 A{$this->a} X0 Y{$this->y}\n";
@@ -524,43 +533,45 @@ class Lathe4d
 				# обратный ход
 
 				#1: y=end, a=2x360 + резьба + 10
-				$this->a -= 10;
+				$this->a -= 10 * $direction;
 				#2: y=end, a=2x360 + резьба
 				$ret .= "G1 Z{$this->z} A{$this->a}\n";	# врезание до заданной глубины на A-=10
 
-				$this->a -= 360;
+				$this->a -= 360 * $direction;
 				#2: y=end, a=360 + резьба
 				$ret .= "G1 A{$this->a}\n";	# кружок на месте налево
 
 				$this->y = $yBegin;				# погнали налево крутя, ехать к началу
-				$this->a = 360;
+
+				$this->a = 360 * $direction;
 				#2: y=begin, a=360
 				$ret .= "G1 Y{$this->y} A{$this->a}\n";	# крутим резьбу налево
 
-				$this->a = -10;				# круг на месте и лишние 10° - для следующего врезания
-				#2: y=begin, a=-10
+				# круг на месте и лишние 10° - для следующего врезания, если НЕ финальный проход
+				$this->a = ($this->z == ($dEnd/2)) ? 0 : (-10 * $direction);
+				#2: y=begin, a=-10 или a=0 при финальном
 				$ret .= "G1 A{$this->a}\n";
 			}
 			else {
 				# прямой ход
 
 				#2: y=begin, a=-10
-				$this->a += 10;
+				$this->a += 10 * $direction;
 				#1: y=begin, a=0
 				$ret .= "G1 Z{$this->z} A{$this->a}\n";	# врезание до заданной глубины на A+=10
 
-				$this->a += 360;
+				$this->a += 360 * $direction;
 				#1: y=begin, a=360
 				$ret .= "G1 A{$this->a}\n";		# кружок на месте
 
 				$this->y = $yEnd;
-				$this->a += ($yEnd - $yBegin) / $yStep * 360;
+				$this->a += ($yEnd - $yBegin) / $yStep * 360 * $direction;
 				#1: y=end, a=360 + резьба
 				$ret .= "G1 Y{$this->y} A{$this->a}\n";	# крутим резьбу
 
-				$this->a += 370;
-				#1: y=end, a=2x360 + резьба + 10
-				$ret .= "G1 A{$this->a}\n";			# кружок на месте и ещё 10° для врезания потом
+				$this->a += (($this->z == ($dEnd/2)) ? 360 : 370) * $direction;
+				#1: y=end, a=2x360 + резьба + 10 (если НЕ финальный проход)
+				$ret .= "G1 A{$this->a}\n";			# кружок на месте
 			}
 
 		} while ($this->z != ($dEnd/2));
