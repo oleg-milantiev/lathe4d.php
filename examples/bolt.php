@@ -32,7 +32,7 @@ echo $lathe->setCutter($cutter);
 # Голова шестигранником на ключ 31 (именно 31, не ~30.8 под реальный ключ) длиной 10. Фаски
 # Длиной резьбы 30
 
-echo $lathe->cutRight(40, 36);			# отрезать справа всё, что L>25
+echo $lathe->cutRight(['y' => 40, 'dBegin' => 36]);			# отрезать справа всё, что L>25
 
 # Цилиндр под шестигранник 31 с фасками (31 * SOFT).
 echo $lathe->cylinder(0, 10, 36, 31 * Lathe4d::$HEXAGON_SOFT);
@@ -65,6 +65,6 @@ echo $lathe->thread(10 + 3, 40 - 3, 'M30x8');
 # Отрез слева - срезаем деталь
 # !! Помни, что фреза дойдёт до -6! Опасность столкновения c токарным патроном
 //echo $lathe->setCutter($cutter);
-echo $lathe->cutLeft(0, 36);
+echo $lathe->cutLeft(['y' => 0, 'dBegin' => 36]);
 
 echo $lathe->end();

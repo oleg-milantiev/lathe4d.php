@@ -584,40 +584,109 @@ class Lathe4d
 	}
 
 
+	// Направление вращения оси при резе
+	public static $CUT_RIGHT = 1;
+	public static $CUT_LEFT  = -1;
+
+
 	/**
 	 * Обрезать мусор справа. Режет до dEnd. Если не задал, то до нуля
+	 *
+	 * @param $params array Массив параметров: y, dBegin, [dEnd], [direction]
+	 * @return string g-code
 	 */
-	public function cutRight($y, $dBegin, $dEnd = 0)
+	public function cutRight($params)
 	{
-		$ret = "( CutRight Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+		if (!isset($params['y']) or !isset($params['dBegin'])) {
+			die('ERROR: Не заданы обязательные параметры: y, dBegin');
+		}
 
-		$ret .= $this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd);
+		$y         = $params['y'];
+		$dBegin    = $params['dBegin'];
+		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
+		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_RIGHT;
+
+		$ret = "( CutRight Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
+
+		$ret .= $this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd, $direction);
 
 		return $ret;
 	}
 
 	/**
 	 * Обрезать деталь слева. Режет до dEnd. Если не задал, то до нуля
+	 *
+	 * @param $params array Массив параметров: y, dBegin, [dEnd], [direction]
+	 * @return string g-code
 	 */
-	public function cutLeft($y, $dBegin, $dEnd = 0)
+	public function cutLeft($params)
 	{
-		$ret = "( CutLeft Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+		if (!isset($params['y']) or !isset($params['dBegin'])) {
+			die('ERROR: Не заданы обязательные параметры: y, dBegin');
+		}
 
-		$ret .= $this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd);
+		$y         = $params['y'];
+		$dBegin    = $params['dBegin'];
+		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
+		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_RIGHT;
+
+		$ret = "( CutLeft Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
+
+		$ret .= $this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd, $direction);
 
 		return $ret;
 	}
 
-	public function cutCenter($y, $dBegin, $dEnd = 0)
+	/**
+	 * Отрезать по заданному Y (+- радиус фрезы, конечно)
+	 * Режет до dEnd. Если не задал, то до нуля
+	 *
+	 * @param $params array Массив параметров: y, dBegin, [dEnd], [direction]
+	 * @return string g-code
+	 */
+	public function cutCenter($params)
 	{
-		$ret = "( CutCenter Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
+		if (!isset($params['y']) or !isset($params['dBegin'])) {
+			die('ERROR: Не заданы обязательные параметры: y, dBegin');
+		}
 
-		$ret .= $this->cut($y, $dBegin, $dEnd);
+		$y         = $params['y'];
+		$dBegin    = $params['dBegin'];
+		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
+		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_RIGHT;
+
+		$ret = "( CutCenter Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
+
+		$ret .= $this->cut($y, $dBegin, $dEnd, $direction);
 
 		return $ret;
 	}
 
-	private function cut($y, $dBegin, $dEnd)
+
+	/**
+	 * Срезание движением фрезера напра-лево с медленным поворотом
+	 * В границах dОстатка
+	 *
+	 * @todo implement
+	 * @todo попутное / встречное фрезерование за счёт yЩели на чууууть больше dФрезы
+	 */
+	private function cutLeftRight()
+	{
+	}
+
+
+	/**
+	 * @todo Под конец реза идёт врезание центром фрезы.
+	 * @todo Надо увеличивать zPassDepth, в соответствии с dФрезы и dОстатка
+	 *
+	 * @param $y
+	 * @param $dBegin
+	 * @param $dEnd
+	 * @param $direction
+	 *
+	 * @return string g-code
+	 */
+	private function cut($y, $dBegin, $dEnd, $direction)
 	{
 		$ret = '';
 
@@ -631,11 +700,11 @@ class Lathe4d
 		# Фрезу подвели к началу
 
 		$this->z = $dEnd/2;
-		$this->a = ($dBegin/2 - $dEnd/2) / $this->cutter->getPassDepth() * 360;
+		$this->a = ($dBegin/2 - $dEnd/2) / $this->cutter->getPassDepth() * 360 * $direction;
 		$ret .= "G1 A{$this->a} Z{$this->z}\n";
 		# Спиралью опустил до $dEnd
 
-		$this->a += 360;
+		$this->a += 360 * $direction;
 		$ret .= "G1 A{$this->a}\n";
 		# Круг почёта на месте
 
