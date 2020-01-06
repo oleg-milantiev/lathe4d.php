@@ -490,6 +490,7 @@ class Lathe4d
 
 	/**
 	 * Резьба гравёром
+	 * @todo адаптивное заглубление. В начале лишь царапаем гравёром и можно увеличить подачу
 	 * 
 	 * @param $yBegin float Начальный размер цилиндра (меньший, ex: 0)
 	 * @param $yEnd float Конечный размер цилиндра (больший, ex: 10)
@@ -585,14 +586,26 @@ class Lathe4d
 
 
 	// Направление вращения оси при резе
-	public static $CUT_RIGHT = 1;
-	public static $CUT_LEFT  = -1;
+	public static $CUT_DIR_RIGHT = 1;
+	public static $CUT_DIR_LEFT  = -1;
+
+	/**
+	 * Режим вычисления шага по Z:
+	 * - center: простой и точный. На каждый оборот спирали заглубление на cutter->passDepth
+	 * - half: см. wiki/figure-cut-zpass. Точка врезания половины радиуса фрезы
+	 * - 75: Точка врезания 3/4 радиуса фрезы
+	 * - diameter: Точка врезания края фрезы соответствует срезу заготовки
+	 */
+	public static $CUT_ZPASS_CENTER   = 'center';
+	public static $CUT_ZPASS_HALF     = 'half';
+	public static $CUT_ZPASS_75       = '75';
+	public static $CUT_ZPASS_DIAMETER = 'diameter';
 
 
 	/**
 	 * Обрезать мусор справа. Режет до dEnd. Если не задал, то до нуля
 	 *
-	 * @param $params array Массив параметров: y, dBegin, [dEnd], [direction]
+	 * @param $params array Массив параметров: y, dBegin, [dEnd], [direction], [zPassMode]
 	 * @return string g-code
 	 */
 	public function cutRight($params)
@@ -604,11 +617,12 @@ class Lathe4d
 		$y         = $params['y'];
 		$dBegin    = $params['dBegin'];
 		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
-		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_RIGHT;
+		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
+		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
 
-		$ret = "( CutRight Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
+		$ret = "( CutRight Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
 
-		$ret .= $this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd, $direction);
+		$ret .= $this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd, $direction, $zPassMode);
 
 		return $ret;
 	}
@@ -628,11 +642,12 @@ class Lathe4d
 		$y         = $params['y'];
 		$dBegin    = $params['dBegin'];
 		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
-		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_RIGHT;
+		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
+		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
 
-		$ret = "( CutLeft Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
+		$ret = "( CutLeft Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
 
-		$ret .= $this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd, $direction);
+		$ret .= $this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd, $direction, $zPassMode);
 
 		return $ret;
 	}
@@ -653,11 +668,12 @@ class Lathe4d
 		$y         = $params['y'];
 		$dBegin    = $params['dBegin'];
 		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
-		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_RIGHT;
+		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
+		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
 
-		$ret = "( CutCenter Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
+		$ret = "( CutCenter Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n";
 
-		$ret .= $this->cut($y, $dBegin, $dEnd, $direction);
+		$ret .= $this->cut($y, $dBegin, $dEnd, $direction, $zPassMode);
 
 		return $ret;
 	}
@@ -676,17 +692,17 @@ class Lathe4d
 
 
 	/**
-	 * @todo Под конец реза идёт врезание центром фрезы.
-	 * @todo Надо увеличивать zPassDepth, в соответствии с dФрезы и dОстатка
+	 * DRY для семейства public function cut*()
 	 *
-	 * @param $y
-	 * @param $dBegin
-	 * @param $dEnd
-	 * @param $direction
+	 * @param $y float Y-координата фрезы
+	 * @param $dBegin float начальный диаметр
+	 * @param $dEnd float конечный диаметр
+	 * @param $direction int enum Направление реза - один из self::$CUT_DIR_*)
+	 * @param $zPassMode string enum Режим заглубления (см. self::$CUT_ZPASS_*)
 	 *
 	 * @return string g-code
 	 */
-	private function cut($y, $dBegin, $dEnd, $direction)
+	private function cut($y, $dBegin, $dEnd, $direction, $zPassMode)
 	{
 		$ret = '';
 
@@ -699,18 +715,71 @@ class Lathe4d
 		$ret .= "G1 Z{$this->z} F{$this->cutter->getFeed()}\n";
 		# Фрезу подвели к началу
 
-		$this->z = $dEnd/2;
-		$this->a = ($dBegin/2 - $dEnd/2) / $this->cutter->getPassDepth() * 360 * $direction;
-		$ret .= "G1 A{$this->a} Z{$this->z}\n";
-		# Спиралью опустил до $dEnd
+		switch ($zPassMode) {
+			case self::$CUT_ZPASS_CENTER:
+				# Спиралью опустил до $dEnd
+				$this->z = $dEnd/2;
+				$this->a = ($dBegin/2 - $dEnd/2) / $this->cutter->getPassDepth() * 360 * $direction;
+				$ret .= "G1 A{$this->a} Z{$this->z}\n";
+				break;
 
-		$this->a += 360 * $direction;
-		$ret .= "G1 A{$this->a}\n";
-		# Круг почёта на месте
+			case self::$CUT_ZPASS_HALF:
+				$ret .= $this->cutZPass($dBegin/2, $dEnd/2, $direction, $this->cutter->getRadius() / 2);
+				break;
+
+			case self::$CUT_ZPASS_75:
+				$ret .= $this->cutZPass($dBegin/2, $dEnd/2, $direction, $this->cutter->getRadius() * 0.75);
+				break;
+
+			case self::$CUT_ZPASS_DIAMETER:
+				$ret .= $this->cutZPass($dBegin/2, $dEnd/2, $direction, $this->cutter->getRadius());
+				break;
+		}
+
+		if ($this->z > 0) {
+			# Круг почёта на месте (не нужен, если уже r=0)
+			$this->a += 360 * $direction;
+			$ret .= "G1 A{$this->a}\n";
+		}
 
 		$ret .= $this->zToSafe();
 		$ret .= $this->aTo360();
 		$ret .= $this->aReset();
+
+		return $ret;
+	}
+
+
+	private function cutZPass($rBegin, $rEnd, $direction, $xRange)
+	{
+		$ret = '';
+
+		// Найти до какого z подойдёт обычный режим. Точка пересечения dФрезы с dОстатка
+		$rEndStandart = ($this->cutter->getPassDepth() * $this->cutter->getPassDepth() + $xRange * $xRange) / (2 * $this->cutter->getPassDepth());
+
+		if ($rEndStandart < $rBegin) {
+			# Стандартный режим
+			$this->z = $rEndStandart;
+			$this->a = ($rBegin - $rEndStandart) / $this->cutter->getPassDepth() * 360 * $direction;
+			$ret .= "G1 A{$this->a} Z{$this->z}\n";
+		}
+
+		while ($this->z > $rEnd) {
+			# Стандартный режим не дорезал до требуемой глубины. Добавим драйва!
+
+			# На полный оборот нужно заглубиться на $passDepth
+			$passDepth = $this->z - sqrt($this->z * $this->z - $xRange * $xRange);
+
+			if ($this->z - $passDepth < $rEnd) {
+				# Но с таким заглублением прорежем глубже желаемого!
+				// @todo лучше уменьшить угол, а не заглубление
+				$passDepth = $this->z - $rEnd;
+			}
+
+			$this->a += 360 * $direction; 	# Один оборот дальше
+			$this->z -= $passDepth;			# Вычисленное заглубление
+			$ret .= "G1 A{$this->a} Z{$this->z}\n";
+		}
 
 		return $ret;
 	}
