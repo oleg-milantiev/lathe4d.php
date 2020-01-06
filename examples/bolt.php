@@ -35,11 +35,26 @@ echo $lathe->setCutter($cutter);
 echo $lathe->cutRight(['y' => 40, 'dBegin' => 36]);			# отрезать справа всё, что L>25
 
 # Цилиндр под шестигранник 31 с фасками (31 * SOFT).
-echo $lathe->cylinder(0, 10, 36, 31 * Lathe4d::$HEXAGON_SOFT);
-echo $lathe->hexagon(0, 10, 31 * Lathe4d::$HEXAGON_SOFT, 31);
+echo $lathe->cylinder([
+	'yBegin' => 0,
+	'yEnd'   => 10,
+	'dBegin' => 36,
+	'yEnd'   => 31 * Lathe4d::$HEXAGON_SOFT
+]);
+echo $lathe->hexagon([
+	'yBegin' => 0,
+	'yEnd'   => 10,
+	'dBegin' => 31 * Lathe4d::$HEXAGON_SOFT,
+	'dEnd'   => 31,
+]);
 
 # Резьба
-echo $lathe->cylinder(10, 40, 36, 29.9);	# под резьбу М30, Y[10..30]
+echo $lathe->cylinder([
+	'yBegin' => 10,
+	'yEnd'   => 40,
+	'dBegin' => 36,
+	'dEnd'   => 29.9
+]);	# под резьбу М30, Y[10..30]
 
 
 # По уму, мелкую резьбу надо было резать гравёром, но для теста я фрезернул крупную резьбу 6мм фрезой
@@ -65,6 +80,9 @@ echo $lathe->thread(10 + 3, 40 - 3, 'M30x8');
 # Отрез слева - срезаем деталь
 # !! Помни, что фреза дойдёт до -6! Опасность столкновения c токарным патроном
 //echo $lathe->setCutter($cutter);
-echo $lathe->cutLeft(['y' => 0, 'dBegin' => 36]);
+echo $lathe->cutLeft([
+	'y'      => 0,
+	'dBegin' => 36
+]);
 
 echo $lathe->end();

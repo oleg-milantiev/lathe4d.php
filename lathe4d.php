@@ -171,6 +171,11 @@ class Lathe4d
 		$this->blank = $blank;
 	}
 
+	public function getCutter()
+	{
+		return $this->cutter;
+	}
+
 	public function setCutter(Cutter $cutter)
 	{
 		$ret = '';
@@ -244,23 +249,37 @@ class Lathe4d
 	 * Основа болта - цилиндр диаметра dSize*1.155 для острых граней. Или ~*1.115 с фасками
 	 * 				- можно и больше цилиндр. Схавает так, как надо, без остатка и без жадности
 	 *
-	 * @param $yBegin float Начальная координата Y площадки
-	 * @param $yEnd float Конечная координата Y площадки
-	 * @param $dBegin float Начальный диаметр реза
-	 * @param $dEnd float Размер ключа, например, 12.8 под 13й
-	 * @param $aStart float Угол первой плоскости (0 по умолчанию)
+	 * @params array Параметры: yBegin, yEnd, dBegin, End, [aStart], [yStepoverMm]
 	 *
 	 * @todo далёкие планы - переделка на iMaching справа. Попутное или встречное (щас вперемешку)
 	 */
-	public function hexagon($yBegin, $yEnd, $dBegin, $dEnd, $aStart = 0)
+	public function hexagon($params)
 	{
 		if (!$this->cutter) {
 			die('ERROR: Cutter not defined');
 		}
 
+		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['dBegin']) or !isset($params['dEnd'])) {
+			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, dBegin, dEnd');
+		}
+
+		# Делаем yBegin < $yEnd, как бы их не задали
+		$yBegin = ($params['yBegin'] < $params['yEnd']) ? $params['yBegin'] : $params['yEnd'];
+		$yEnd   = ($params['yBegin'] < $params['yEnd']) ? $params['yEnd'] : $params['yBegin'];
+
 		if (($yEnd - $yBegin) < $this->cutter->getDiameter()) {
 			die('ERROR: Cutter cant fit into hexagon length');
 		}
+
+		# Аналогично и dBegin всегда больше dEnd
+		$dBegin = ($params['dBegin'] < $params['dEnd']) ? $params['dEnd'] : $params['dBegin'];
+		$dEnd   = ($params['dBegin'] < $params['dEnd']) ? $params['dBegin'] : $params['dEnd'];
+
+		$aStart = isset($params['aStart']) ? $params['aStart'] : 0;
+
+		$yStepoverMm = isset($params['yStepoverMm'])
+			? $params['yStepoverMm']
+			: $this->cutter->getStepoverMm();
 
 		$ret = "( Hexagon Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] ". (($aStart) ? ('A['. $aStart .'] '): '') .")\n";
 
@@ -325,11 +344,13 @@ class Lathe4d
 				$ret .= "G0 X{$this->x} Y{$this->y}\n";
 				$ret .= "G1 Z{$this->z} F{$this->cutter->getFeed()}\n";
 
-				$this->y -= $this->cutter->getStepoverMm();
+				$this->y -= $yStepoverMm;
 
 				# Цикл по Y
 				do {
-					$this->y += $this->cutter->getStepoverMm();
+					# @todo равномерно разделить проходы по Y
+					# @todo Пример: 21 +[4.8] = 25.8 +[1.2] = 27. А надо ряд 21, 24, 27 (по 3мм)
+					$this->y += $yStepoverMm;
 
 					if ($this->y > ($yEnd - $this->cutter->getRadius())) {
 						# Последний проход
@@ -370,21 +391,29 @@ class Lathe4d
 	/**
 	 * Цилиндр
 	 *
-	 * @param $yBegin float Начальный размер цилиндра (меньший, ex: 0)
-	 * @param $yEnd float Конечный размер цилиндра (больший, ex: 10)
-	 * @param $dBegin float Начальный диаметр (больший, ex: 50)
-	 * @param $dEnd float Конечный диаметр (меньший, ex: 40)
-	 * @todo сделать пофик порядок начальных / конечных D и Y
+	 * @param $params array Массив параметров: dBegin, dEnd, yBegin, yEnd
 	 */
-	public function cylinder($yBegin, $yEnd, $dBegin, $dEnd)
+	public function cylinder($params)
 	{
 		if (!$this->cutter) {
 			die('ERROR: Cutter not defined');
 		}
 
+		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['dBegin']) or !isset($params['dEnd'])) {
+			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, dBegin, dEnd');
+		}
+
+		# Делаем yBegin < $yEnd, как бы их не задали
+		$yBegin = ($params['yBegin'] < $params['yEnd']) ? $params['yBegin'] : $params['yEnd'];
+		$yEnd   = ($params['yBegin'] < $params['yEnd']) ? $params['yEnd'] : $params['yBegin'];
+
 		if (($yEnd - $yBegin) < $this->cutter->getDiameter()) {
 			die('ERROR: Cutter cant fit into cylinder length');
 		}
+
+		# Аналогично и dBegin всегда больше dEnd
+		$dBegin = ($params['dBegin'] < $params['dEnd']) ? $params['dEnd'] : $params['dBegin'];
+		$dEnd   = ($params['dBegin'] < $params['dEnd']) ? $params['dBegin'] : $params['dEnd'];
 
 		$ret = "( Cylinder Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n";
 
@@ -578,8 +607,9 @@ class Lathe4d
 		} while ($this->z != ($dEnd/2));
 
 		# Конец
-
 		$ret .= $this->zToSafe();
+		$ret .= $this->aTo360();
+		$ret .= $this->aReset();
 
 		return $ret;
 	}
@@ -611,7 +641,7 @@ class Lathe4d
 	public function cutRight($params)
 	{
 		if (!isset($params['y']) or !isset($params['dBegin'])) {
-			die('ERROR: Не заданы обязательные параметры: y, dBegin');
+			die('ERROR: Mandatory parameters are not defined: y, dBegin');
 		}
 
 		$y         = $params['y'];
@@ -636,7 +666,7 @@ class Lathe4d
 	public function cutLeft($params)
 	{
 		if (!isset($params['y']) or !isset($params['dBegin'])) {
-			die('ERROR: Не заданы обязательные параметры: y, dBegin');
+			die('ERROR: Mandatory parameters are not defined: y, dBegin');
 		}
 
 		$y         = $params['y'];
@@ -662,7 +692,7 @@ class Lathe4d
 	public function cutCenter($params)
 	{
 		if (!isset($params['y']) or !isset($params['dBegin'])) {
-			die('ERROR: Не заданы обязательные параметры: y, dBegin');
+			die('ERROR: Mandatory parameters are not defined: y, dBegin');
 		}
 
 		$y         = $params['y'];
@@ -768,9 +798,12 @@ class Lathe4d
 			# Стандартный режим не дорезал до требуемой глубины. Добавим драйва!
 
 			# На полный оборот нужно заглубиться на $passDepth
-			$passDepth = $this->z - sqrt($this->z * $this->z - $xRange * $xRange);
+			$passDepth = ($xRange < $this->z) ?
+				($this->z - sqrt($this->z * $this->z - $xRange * $xRange))
+				: $this->z
+			;
 
-			if ($this->z - $passDepth < $rEnd) {
+			if (($this->z - $passDepth) < $rEnd) {
 				# Но с таким заглублением прорежем глубже желаемого!
 				// @todo лучше уменьшить угол, а не заглубление
 				$passDepth = $this->z - $rEnd;
