@@ -29,6 +29,14 @@ class Cutter
 {
 	private $diameter;
 	private $passDepth;
+
+	/** @var float аля "iMaching". Глубина выборки сбоку, мм */
+	private $sideDepth;
+	/** @var float Ширина выборки сбоку, мм */
+	private $sideStep;
+	/** @var bool Попутное (да) или встречное (нет) боковое фрезерование */
+	private $sideForward;
+
 	private $stepover;
 	private $feed;
 	private $plunge; // @todo Пока не используется
@@ -37,7 +45,7 @@ class Cutter
 
 	public function __construct($params = [])
 	{
-		foreach (['diameter', 'passDepth', 'stepover', 'feed', 'name', 'tool', 'plunge'] as $field) {
+		foreach (['diameter', 'passDepth', 'stepover', 'feed', 'name', 'tool', 'plunge', 'sideDepth', 'sideStep', 'sideForward'] as $field) {
 			if (isset($params[$field])) {
 				$this->{$field} = $params[$field];
 			}
@@ -57,6 +65,54 @@ class Cutter
 	public function getName()
 	{
 		return $this->name;
+	}
+
+	/**
+	 * @return float
+	 */
+	public function getSideDepth()
+	{
+		return $this->sideDepth;
+	}
+
+	/**
+	 * @param float $sideDepth
+	 */
+	public function setSideDepth($sideDepth)
+	{
+		$this->sideDepth = $sideDepth;
+	}
+
+	/**
+	 * @return float
+	 */
+	public function getSideStep()
+	{
+		return $this->sideStep;
+	}
+
+	/**
+	 * @param float $sideStep
+	 */
+	public function setSideStep($sideStep)
+	{
+		$this->sideStep = $sideStep;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function isSideForward()
+	{
+		return $this->sideForward;
+	}
+
+	/**
+	 * @param bool $sideForward
+	 */
+	public function setSideForward($sideForward)
+	{
+		$this->sideForward = $sideForward;
 	}
 
 	public function getDiameter()
@@ -241,19 +297,54 @@ class Lathe4d
 	}
 
 
+	public static $SQUARE_SHARP = 1.4142135623730950488016887242097;	# sqrt(2) - диагональ квадрата
+	public static $SQUARE_SOFT  = 1.35;
+
+	/**
+	 * Квадратная голова болта
+	 * Основа болта цилиндр:
+	 *	- dSize*$SQUARE_SHARP для острых граней;
+	 *	- dSize*$SQUARE_SOFT - с фасками;
+	 *	- можно и больше цилиндр. Схавает справа так, как надо, без остатка и без жадности.
+	 *
+	 * @params array Параметры: yBegin, yEnd, dBegin, End, [aStart], [sideMill]
+	 */
+	public function square($params)
+	{
+		$params['figure'] = 'Square';
+		$params['aStep']  = 90;
+
+		return $this->polygon($params);
+	}
+
+
 	public static $HEXAGON_SHARP = 1.155;
 	public static $HEXAGON_SOFT  = 1.115;
 
 	/**
 	 * Шестигранная голова болта
-	 * Основа болта - цилиндр диаметра dSize*1.155 для острых граней. Или ~*1.115 с фасками
-	 * 				- можно и больше цилиндр. Схавает так, как надо, без остатка и без жадности
+	 * Основа болта цилиндр:
+	 *	- dSize*$HEXAGON_SHARP для острых граней;
+	 *	- dSize*$HEXAGON_SOFT - с фасками;
+	 *	- можно и больше цилиндр. Схавает справа так, как надо, без остатка и без жадности.
 	 *
-	 * @params array Параметры: yBegin, yEnd, dBegin, End, [aStart], [yStepoverMm]
-	 *
-	 * @todo далёкие планы - переделка на iMaching справа. Попутное или встречное (щас вперемешку)
+	 * @params array Параметры: yBegin, yEnd, dBegin, End, [aStart], [sideMill]
 	 */
 	public function hexagon($params)
+	{
+		$params['figure'] = 'Hexagon';
+		$params['aStep']  = 60;
+
+		return $this->polygon($params);
+	}
+
+	/**
+	 * Основа для hexagon и square
+	 *
+	 * @param $params
+	 * @return string
+	 */
+	private function polygon($params)
 	{
 		if (!$this->cutter) {
 			die('ERROR: Cutter not defined');
@@ -268,7 +359,7 @@ class Lathe4d
 		$yEnd   = ($params['yBegin'] < $params['yEnd']) ? $params['yEnd'] : $params['yBegin'];
 
 		if (($yEnd - $yBegin) < $this->cutter->getDiameter()) {
-			die('ERROR: Cutter cant fit into hexagon length');
+			die('ERROR: Cutter cant fit into '. $params['figure'] .' length');
 		}
 
 		# Аналогично и dBegin всегда больше dEnd
@@ -277,11 +368,13 @@ class Lathe4d
 
 		$aStart = isset($params['aStart']) ? $params['aStart'] : 0;
 
-		$yStepoverMm = isset($params['yStepoverMm'])
-			? $params['yStepoverMm']
-			: $this->cutter->getStepoverMm();
+		if (isset($params['sideMill'])) {
+			if (!$this->cutter->getSideDepth() or !$this->cutter->getSideStep()) {
+				die('Error: Cant sideMill with this cutter (not defined side* properties)');
+			}
+		}
 
-		$ret = "( Hexagon Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] ". (($aStart) ? ('A['. $aStart .'] '): '') .")\n";
+		$ret = "( {$params['figure']} Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] ". (($aStart) ? ('A['. $aStart .'] '): '') .")\n";
 
 		$ret .= $this->zToSafe();
 
@@ -292,22 +385,22 @@ class Lathe4d
 		}
 
 		# Слева режем точно до грани болта
-		# Правая и левая координаты грани болта на уровне dEnd
-		$xRightBolt = $dEnd/2 * tan(pi() / 6);
-		$xLeftBolt  = -$xRightBolt;
+		$xLeftBolt  = - $dEnd/2 * tan(pi() / (360 / $params['aStep']));
 
-		# 6 граней
-		for ($face = 1; $face <= 6; $face ++) {
+		# 6 граней для hexagon и 4 грани для square
+		for ($face = 1; $face <= 360 / $params['aStep']; $face ++) {
 
 			if ($this->isInfo()) {
-				$ret .= "( Hexagon - Face #{$face} )\n";
+				$ret .= "( {$params['figure']} - Face #{$face} )\n";
 			}
 
 			$this->z = $dBegin / 2;
 
 			do {
 
-				$this->z -= $this->cutter->getPassDepth();
+				$this->z -= isset($params['sideMill'])
+					? $this->cutter->getSideDepth()
+					: $this->cutter->getPassDepth();
 
 				if ($this->z < ($dEnd / 2)) {
 					# последний проход
@@ -325,64 +418,128 @@ class Lathe4d
 				# Правая граница цилиндра dBegin по X на этой высоте
 				$xRight = sqrt($dBegin / 2 * $dBegin / 2 - $this->z * $this->z);
 
-//				# Левый срез следующей грани
-//				$xRightNext = $xRightBolt + tan(pi() / 3) * ($this->z - $dEnd / 2);
-//
-//				# Не нужно резать дальше следующей грани.
-//				if ($xRight > $xRightNext) {
-//					$xRight = $xRightNext;
-//				}
-
 				if ($this->isDebug()) {
-					$ret .= "( Hexagon - Face #{$face} - Square X[{$xLeft}..{$xRight}] Y[{$yBegin}..{$yEnd}] Z[{$this->z}] )\n";
+					$ret .= "( {$params['figure']} - Face #{$face} - Square X[{$xLeft}..{$xRight}] Y[{$yBegin}..{$yEnd}] Z[{$this->z}] )\n";
 				}
 
 				# Врезание справа, правее цилиндра подвести и погнали налево
 				$this->x = $xRight + $this->cutter->getRadius();
-				$this->y = $yBegin + $this->cutter->getRadius();
+				$this->y = $yEnd - $this->cutter->getRadius();
 
-				$ret .= "G0 X{$this->x} Y{$this->y}\n";
-				$ret .= "G1 Z{$this->z} F{$this->cutter->getFeed()}\n";
-
-				$this->y -= $yStepoverMm;
-
-				# Цикл по Y
-				do {
-					# @todo равномерно разделить проходы по Y
-					# @todo Пример: 21 +[4.8] = 25.8 +[1.2] = 27. А надо ряд 21, 24, 27 (по 3мм)
-					$this->y += $yStepoverMm;
-
-					if ($this->y > ($yEnd - $this->cutter->getRadius())) {
-						# Последний проход
-						$this->y = $yEnd - $this->cutter->getRadius();
-					}
-
-					// @todo за чистоту кода просится wasY и анализ его изменений (лишний кот)
-					$ret .= "G1 Y{$this->y}\n";
-
-					if ($this->x == $xLeft) {
-						# девочки направо
-						$this->x = $xRight;
-					}
-					else {
-						# мальчики налево
-						$this->x = $xLeft;
-					}
-
-					$ret .= "G1 X{$this->x}\n";
-
-				} while ($this->y != ($yEnd - $this->cutter->getRadius()));
+				$ret .= isset($params['sideMill'])
+					? $this->squareLevelSideMill($xLeft, $xRight, $yBegin, $yEnd)
+					: $this->squareLevelSnake(   $xLeft, $xRight, $yBegin, $yEnd);
 
 			} while ($this->z != ($dEnd/2));
 
 			$ret .= $this->zToSafe();
 
-			$this->a += 60;
+			$this->a += $params['aStep'];
 			$ret .= "G0 A{$this->a}\n";
 		}
 
 		$ret .= $this->aTo360();
 		$ret .= $this->aReset();
+
+		return $ret;
+	}
+
+
+	/**
+	 * Срез одного уровня прямоугольника змейкой от yEnd до yBegin налево-направо
+	 * Предполагается, что this->x, y и z содержат координаты перехода к XYZ[safe] начала справа-сверху
+	 * Режет с заходом за xLeft / xRight на радиус фрезы. Но держа себя в рамках по Y
+	 */
+	private function squareLevelSnake($xLeft, $xRight, $yBegin, $yEnd)
+	{
+		$ret = '';
+
+		$ret .= "G0 X{$this->x} Y{$this->y}\n";
+		$ret .= "G1 Z{$this->z} F{$this->cutter->getFeed()}\n";
+
+		# При дробном кол-ве шагов yStepoverMm усредним
+		$yRange = $yEnd - $yBegin - $this->cutter->getDiameter();
+		$yStepoverMm = $yRange / ceil( $yRange / $this->cutter->getStepoverMm() );
+
+		$this->y += $yStepoverMm;
+
+		# Цикл по Y
+		do {
+			# @todo равномерно разделить проходы по Y
+			# @todo Пример: 21 +[4.8] = 25.8 +[1.2] = 27. А надо ряд 21, 24, 27 (по 3мм)
+			$this->y -= $yStepoverMm;
+
+			if ($this->y < ($yBegin + $this->cutter->getRadius())) {
+				# Последний проход
+				$this->y = $yBegin + $this->cutter->getRadius();
+			}
+
+			// @todo за чистоту кода просится wasY и анализ его изменений (лишний кот)
+			$ret .= "G1 Y{$this->y}\n";
+
+			if ($this->x == $xLeft) {
+				# девочки направо
+				$this->x = $xRight;
+			}
+			else {
+				# мальчики налево
+				$this->x = $xLeft;
+			}
+
+			$ret .= "G1 X{$this->x}\n";
+
+		} while ($this->y != ($yBegin + $this->cutter->getRadius()));
+
+		return $ret;
+	}
+
+	/**
+	 * Срез одного уровня прямоугольника боковым резом.
+	 * То есть, достаточно серьёзное заглубление и фрезеровка боком фрезы на заданную ширину захвата
+	 * Предполагается, что this->x, y и z содержат координаты перехода к XYZ[safe] начала справа-сверху
+	 * Режет с заходом за xLeft / xRight на радиус фрезы. Но держа себя в рамках по Y
+	 *
+	 * Предполагается, что sideStep меньше радиуса фрезы. Иначе нижний отвод надо делить на G1 / G0
+	 * @todo пока реализовано только попутное фрезерование
+	 */
+	private function squareLevelSideMill($xLeft, $xRight, $yBegin, $yEnd)
+	{
+		$ret = '';
+
+		$ret .= "G0 X{$this->x} Y{$this->y}\n";
+		$ret .= "G1 Z{$this->z} F{$this->cutter->getFeed()}\n";
+
+		# Цикл по X налево
+		do {
+			$this->x -= $this->cutter->getSideStep();
+
+			if ($this->x < $xLeft) {
+				# Последний проход
+				$this->x = $xLeft;
+			}
+
+			# "Врезались" в деталь на sideStep (0.1 мм, например)
+			$ret .= "G1 X{$this->x}\n";
+
+			# Основной режущий проход
+			$this->y = $yBegin + $this->cutter->getRadius();
+			$ret .= "G1 Y{$this->y}\n";
+
+			# Дорезка нижнего угла
+			$this->x += $this->cutter->getSideStep();
+			$ret .= "G1 X{$this->x}\n";
+
+			# Чуть отведу фрезу (компенсация отгиба при резе)
+			$this->x += $this->cutter->getSideStep();
+			$ret .= "G0 X{$this->x}\n";
+
+			# Холостой ход к началу реза
+			$this->y = $yEnd - $this->cutter->getRadius();
+			$ret .= "G0 Y{$this->y}\n";
+			$this->x -= $this->cutter->getSideStep() * 2;
+			$ret .= "G0 X{$this->x}\n";
+
+		} while ($this->x != $xLeft);
 
 		return $ret;
 	}
@@ -640,6 +797,10 @@ class Lathe4d
 	 */
 	public function cutRight($params)
 	{
+		if (!$this->cutter) {
+			die('ERROR: Cutter not defined');
+		}
+
 		if (!isset($params['y']) or !isset($params['dBegin'])) {
 			die('ERROR: Mandatory parameters are not defined: y, dBegin');
 		}
@@ -665,6 +826,10 @@ class Lathe4d
 	 */
 	public function cutLeft($params)
 	{
+		if (!$this->cutter) {
+			die('ERROR: Cutter not defined');
+		}
+
 		if (!isset($params['y']) or !isset($params['dBegin'])) {
 			die('ERROR: Mandatory parameters are not defined: y, dBegin');
 		}
@@ -691,6 +856,10 @@ class Lathe4d
 	 */
 	public function cutCenter($params)
 	{
+		if (!$this->cutter) {
+			die('ERROR: Cutter not defined');
+		}
+
 		if (!isset($params['y']) or !isset($params['dBegin'])) {
 			die('ERROR: Mandatory parameters are not defined: y, dBegin');
 		}
@@ -709,15 +878,52 @@ class Lathe4d
 	}
 
 
+	public static $CUT_MOVEX_FORWARD = 'forward';	# Попутное фрезерование
+	public static $CUT_MOVEX_REVERSE = 'reverse';	# Встречное фрезерование
+
 	/**
-	 * Срезание движением фрезера напра-лево с медленным поворотом
-	 * В границах dОстатка
+	 * Срезание движением фрезера X[напра-лево] с медленным поворотом A
+	 * Отлично подходит для черновой обработки на медленной поворотке (как у меня)
+	 * В отличии от cylinder, может резать только 2*dФреза
 	 *
 	 * @todo implement
 	 * @todo попутное / встречное фрезерование за счёт yЩели на чууууть больше dФрезы
+	 * @param $params array Массив параметров: yBegin, yEnd, dBegin, [dEnd], [direction]
 	 */
-	private function cutLeftRight()
+	private function cutMoveX($params)
 	{
+		if (!$this->cutter) {
+			die('ERROR: Cutter not defined');
+		}
+
+		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['dBegin'])) {
+			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, dBegin');
+		}
+
+		# Делаем yBegin < $yEnd, как бы их не задали
+		$yBegin = ($params['yBegin'] < $params['yEnd']) ? $params['yBegin'] : $params['yEnd'];
+		$yEnd   = ($params['yBegin'] < $params['yEnd']) ? $params['yEnd'] : $params['yBegin'];
+
+		if (($yEnd - $yBegin) < $this->cutter->getDiameter()) {
+			die('ERROR: Cutter cant fit into cylinder length');
+		}
+
+		if (!isset($params['dEnd'])) {
+			$params['dEnd'] = 0;
+		}
+
+		# Аналогично и dBegin всегда больше dEnd
+		$dBegin = ($params['dBegin'] < $params['dEnd']) ? $params['dEnd'] : $params['dBegin'];
+		$dEnd   = ($params['dBegin'] < $params['dEnd']) ? $params['dBegin'] : $params['dEnd'];
+
+		# По-умолчанию, попутное фрезерование
+		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_MOVEX_FORWARD;
+
+		$ret = "( CutMoveX Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction={$direction} )\n";
+
+		// @todo подумать ещё
+
+		return $ret;
 	}
 
 
