@@ -29,31 +29,31 @@ $cutter = new Cutter([
 ]);
 */
 
-echo $lathe->start();		# Начальные g-code команды
+$lathe->start();		# Начальные g-code команды
 
-echo $lathe->setCutter($cutter);
+$lathe->setCutter($cutter);
 
 # отрезать справа всё, что y>48
-echo $lathe->cutRight([
+$lathe->cutRight([
 	'y'      => 48,
 	'dBegin' => 36,
 ]);
 
 # точим наружний цилиндр от D36 до D17 с 0 по 48 по Y
-echo $lathe->cylinder([
+$lathe->cylinder([
 	'yBegin' => 0,
 	'yEnd'   => 48,
 	'dBegin' => 36,
 	'dEnd'   => 17,
 ]);
 # ещё пара L 18 цилиндров под резьбы М15 на концах
-echo $lathe->cylinder([
+$lathe->cylinder([
 	'yBegin' => 0,
 	'yEnd'   => 18,
 	'dBegin' => 17,
 	'yEnd'   => 14.9,
 ]);
-echo $lathe->cylinder([
+$lathe->cylinder([
 	'yBegin' => 30,
 	'yEnd'   => 48,
 	'dBegin' => 17,
@@ -67,15 +67,15 @@ $engraver->setFeed(1400);
 $engraver->setName('Гравёр 60°');		# Имя фрезы
 $engraver->setTool(2);					# Номер фрезы
 
-echo $lathe->setCutter($engraver);
+$lathe->setCutter($engraver);
 
-#echo $lathe->thread(0, 17, 1.5, 29.9, 29.9 - 1.5 * 1.3); синоним строки ниже
-echo $lathe->thread(0, 17, 'M15x1.5');		# 0-17, т.к. помним о ширине гравёра. До 18 не доведёт
-echo $lathe->thread(31, 48, 'M15x1.5');
+#$lathe->thread(0, 17, 1.5, 29.9, 29.9 - 1.5 * 1.3); синоним строки ниже
+$lathe->thread(0, 17, 'M15x1.5');		# 0-17, т.к. помним о ширине гравёра. До 18 не доведёт
+$lathe->thread(31, 48, 'M15x1.5');
 
 # отрезаем той же 6мм фрезой
-echo $lathe->setCutter($cutter);
-echo $lathe->cutLeft([
+$lathe->setCutter($cutter);
+$lathe->cutLeft([
 	'y'      => 0,
 	'dBegin' => 36,
 	'dEnd'   => 2,
@@ -86,4 +86,4 @@ echo $lathe->cutLeft([
 		# то есть чтобы с патроном не столкнуться.
 
 
-echo $lathe->end();
+$lathe->end();

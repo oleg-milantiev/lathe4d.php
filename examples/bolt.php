@@ -24,24 +24,24 @@ $cutter = new Cutter([
 	'tool'      => 1,
 ]);
 
-echo $lathe->start();					# Начальные g-code команды
+$lathe->start();					# Начальные g-code команды
 
-echo $lathe->setCutter($cutter);
+$lathe->setCutter($cutter);
 
 # Болт общей длиной 40.
 # Голова шестигранником на ключ 31 (именно 31, не ~30.8 под реальный ключ) длиной 10. Фаски
 # Длиной резьбы 30
 
-echo $lathe->cutRight(['y' => 40, 'dBegin' => 36]);			# отрезать справа всё, что L>25
+$lathe->cutRight(['y' => 40, 'dBegin' => 36]);			# отрезать справа всё, что L>25
 
 # Цилиндр под шестигранник 31 с фасками (31 * SOFT).
-echo $lathe->cylinder([
+$lathe->cylinder([
 	'yBegin' => 0,
 	'yEnd'   => 10,
 	'dBegin' => 36,
 	'yEnd'   => 31 * Lathe4d::$HEXAGON_SOFT
 ]);
-echo $lathe->hexagon([
+$lathe->hexagon([
 	'yBegin' => 0,
 	'yEnd'   => 10,
 	'dBegin' => 31 * Lathe4d::$HEXAGON_SOFT,
@@ -49,7 +49,7 @@ echo $lathe->hexagon([
 ]);
 
 # Резьба
-echo $lathe->cylinder([
+$lathe->cylinder([
 	'yBegin' => 10,
 	'yEnd'   => 40,
 	'dBegin' => 36,
@@ -67,22 +67,22 @@ $engraver = new cutter([
 	'tool'      => 2,
 ]);
 
-echo $lathe->setCutter($engraver);
+$lathe->setCutter($engraver);
 
 # Резьба M30х1.5, Y[10+1.6 - 30]
 # Используется 3.175мм гравёр. Отступ от головы болта радиусом гравёра плюс чуть-чуть = 1.6
-echo $lathe->thread(10 + 1.6, 30, 'M30x1.5');
+$lathe->thread(10 + 1.6, 30, 'M30x1.5');
 */
 
 # Крупная резьба 6мм фрезой
-echo $lathe->thread(10 + 3, 40 - 3, 'M30x8');
+$lathe->thread(10 + 3, 40 - 3, 'M30x8');
 
 # Отрез слева - срезаем деталь
 # !! Помни, что фреза дойдёт до -6! Опасность столкновения c токарным патроном
-//echo $lathe->setCutter($cutter);
-echo $lathe->cutLeft([
+//$lathe->setCutter($cutter);
+$lathe->cutLeft([
 	'y'      => 0,
 	'dBegin' => 36
 ]);
 
-echo $lathe->end();
+$lathe->end();
