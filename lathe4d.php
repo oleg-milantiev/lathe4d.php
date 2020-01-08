@@ -5,13 +5,49 @@
  */
 class Blank
 {
+
+	/** @var float */
 	private $diameter;
+
+	/** @var float */
 	private $length;
 
 	public function __construct($diameter, $length = -1)
 	{
 		$this->diameter = $diameter;
 		$this->length   = $length;
+	}
+
+	/**
+	 * @return float
+	 */
+	public function getDiameter()
+	{
+		return $this->diameter;
+	}
+
+	/**
+	 * @param float $diameter
+	 */
+	public function setDiameter($diameter)
+	{
+		$this->diameter = $diameter;
+	}
+
+	/**
+	 * @return float
+	 */
+	public function getLength()
+	{
+		return $this->length;
+	}
+
+	/**
+	 * @param float $length
+	 */
+	public function setLength($length)
+	{
+		$this->length = $length;
 	}
 
 	public function getRadius()
@@ -346,8 +382,8 @@ class Lathe4d
 		return $this->polygon($params);
 	}
 
-	public static $OCTAGON_SHARP = 1.155;
-	public static $OCTAGON_SOFT  = 1.115;
+	public static $OCTAGON_SHARP = 1.0825;
+	public static $OCTAGON_SOFT  = 1.08;
 
 	/**
 	 * Восьмигранная голова болта
@@ -378,8 +414,12 @@ class Lathe4d
 			die('ERROR: Cutter not defined');
 		}
 
-		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['dBegin']) or !isset($params['dEnd'])) {
-			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, dBegin, dEnd');
+		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['dEnd'])) {
+			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, dEnd');
+		}
+
+		if (!isset($params['dBegin'])) {
+			$params['dBegin'] = $this->blank->getDiameter();
 		}
 
 		# Делаем yBegin < $yEnd, как бы их не задали
@@ -594,8 +634,12 @@ class Lathe4d
 			die('ERROR: Cutter not defined');
 		}
 
-		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['dBegin']) or !isset($params['dEnd'])) {
-			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, dBegin, dEnd');
+		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['dEnd'])) {
+			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, dEnd');
+		}
+
+		if (!isset($params['dBegin'])) {
+			$params['dBegin'] = $this->blank->getDiameter();
 		}
 
 		# Делаем yBegin < $yEnd, как бы их не задали
@@ -712,8 +756,10 @@ class Lathe4d
 
 	/**
 	 * Резьба гравёром
+	 * @todo !!! перевести на $params
+	 * @todo !!! необязательный dBegin
 	 * @todo адаптивное заглубление. В начале лишь царапаем гравёром и можно увеличить подачу
-	 * 
+	 *
 	 * @param $yBegin float Начальный размер цилиндра (меньший, ex: 0)
 	 * @param $yEnd float Конечный размер цилиндра (больший, ex: 10)
 	 * @param $yStep float|string Или именование резьбы ex: 'M15x1.5', или шаг резьбы
@@ -846,12 +892,12 @@ class Lathe4d
 			die('ERROR: Cutter not defined');
 		}
 
-		if (!isset($params['y']) or !isset($params['dBegin'])) {
-			die('ERROR: Mandatory parameters are not defined: y, dBegin');
+		if (!isset($params['y'])) {
+			die('ERROR: Mandatory parameter "Y" is not defined');
 		}
 
 		$y         = $params['y'];
-		$dBegin    = $params['dBegin'];
+		$dBegin    = isset($params['dBegin']) ? $params['dBegin'] : $this->blank->getDiameter();
 		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
 		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
 		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
@@ -873,12 +919,12 @@ class Lathe4d
 			die('ERROR: Cutter not defined');
 		}
 
-		if (!isset($params['y']) or !isset($params['dBegin'])) {
-			die('ERROR: Mandatory parameters are not defined: y, dBegin');
+		if (!isset($params['y'])) {
+			die('ERROR: Mandatory parameter "Y" is not defined');
 		}
 
 		$y         = $params['y'];
-		$dBegin    = $params['dBegin'];
+		$dBegin    = isset($params['dBegin']) ? $params['dBegin'] : $this->blank->getDiameter();
 		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
 		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
 		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
@@ -901,12 +947,12 @@ class Lathe4d
 			die('ERROR: Cutter not defined');
 		}
 
-		if (!isset($params['y']) or !isset($params['dBegin'])) {
-			die('ERROR: Mandatory parameters are not defined: y, dBegin');
+		if (!isset($params['y'])) {
+			die('ERROR: Mandatory parameter "Y" is not defined');
 		}
 
 		$y         = $params['y'];
-		$dBegin    = $params['dBegin'];
+		$dBegin    = isset($params['dBegin']) ? $params['dBegin'] : $this->blank->getDiameter();
 		$dEnd      = isset($params['dEnd']) ? $params['dEnd'] : 0;
 		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
 		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
@@ -914,53 +960,6 @@ class Lathe4d
 		fputs($this->fd, "( CutCenter Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n");
 
 		$this->cut($y, $dBegin, $dEnd, $direction, $zPassMode);
-	}
-
-
-	public static $CUT_MOVEX_FORWARD = 'forward';	# Попутное фрезерование
-	public static $CUT_MOVEX_REVERSE = 'reverse';	# Встречное фрезерование
-
-	/**
-	 * Срезание движением фрезера X[напра-лево] с медленным поворотом A
-	 * Отлично подходит для черновой обработки на медленной поворотке (как у меня)
-	 * В отличии от cylinder, может резать только 2*dФреза
-	 *
-	 * @todo implement
-	 * @todo попутное / встречное фрезерование за счёт yЩели на чууууть больше dФрезы
-	 * @param $params array Массив параметров: yBegin, yEnd, dBegin, [dEnd], [direction]
-	 */
-	private function cutMoveX($params)
-	{
-		if (!$this->cutter) {
-			die('ERROR: Cutter not defined');
-		}
-
-		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['dBegin'])) {
-			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, dBegin');
-		}
-
-		# Делаем yBegin < $yEnd, как бы их не задали
-		$yBegin = ($params['yBegin'] < $params['yEnd']) ? $params['yBegin'] : $params['yEnd'];
-		$yEnd   = ($params['yBegin'] < $params['yEnd']) ? $params['yEnd'] : $params['yBegin'];
-
-		if (($yEnd - $yBegin) < $this->cutter->getDiameter()) {
-			die('ERROR: Cutter cant fit into cylinder length');
-		}
-
-		if (!isset($params['dEnd'])) {
-			$params['dEnd'] = 0;
-		}
-
-		# Аналогично и dBegin всегда больше dEnd
-		$dBegin = ($params['dBegin'] < $params['dEnd']) ? $params['dEnd'] : $params['dBegin'];
-		$dEnd   = ($params['dBegin'] < $params['dEnd']) ? $params['dBegin'] : $params['dEnd'];
-
-		# По-умолчанию, попутное фрезерование
-		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_MOVEX_FORWARD;
-
-		fputs($this->fd, "( CutMoveX Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction={$direction} )\n");
-
-		// @todo подумать ещё
 	}
 
 
