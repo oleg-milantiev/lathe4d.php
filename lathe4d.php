@@ -507,7 +507,7 @@ class Lathe4d
 		do {
 			$this->y -= $yStepoverMm;
 
-			if ($this->y < ($yBegin + $this->cutter->getRadius())) {
+			if ($this->y <= ($yBegin + $this->cutter->getRadius())) {
 				# Последний проход
 				$this->y = $yBegin + $this->cutter->getRadius();
 				$yLast = true;
