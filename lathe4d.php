@@ -304,7 +304,7 @@ class Lathe4d
 		}
 		else {
 			fputs($this->fd, "T{$cutter->getTool()}\n");
-			fputs($this->fd, "(Current cutter {$cutter->getName()})\n");
+			fputs($this->fd, "( Current cutter: {$cutter->getName()} )\n");
 			fputs($this->fd, "M6      (Tool change.)\n");
 		}
 
@@ -328,7 +328,7 @@ class Lathe4d
 			die('ERROR: Safe Z not defined');
 		}
 
-		fputs($this->fd, "( File created by Lathe4d.php )\n");
+		fputs($this->fd, "( File created by Lathe4d.php: https://github.com/oleg-milantiev/lathe4d.php/wiki )\n");
 		fputs($this->fd, "( ". date('d-m-Y H:i') ." )\n");
 
 		# @todo пока взял шапку из aspire for mach3. Потом вынесу наружу
@@ -338,6 +338,14 @@ class Lathe4d
 		fputs($this->fd, "G94\n");
 
 		$this->zToSafe();
+	}
+
+
+	public function pause()
+	{
+		$this->zToSafe();
+
+		fputs($this->fd, "M0      (Temporary machine stop.)\n");
 	}
 
 
@@ -442,14 +450,14 @@ class Lathe4d
 			}
 		}
 
-		fputs($this->fd, "( {$params['figure']} Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] ". (($aStart) ? ('A['. $aStart .'] '): '') .")\n");
+		fputs($this->fd, "\n( {$params['figure']} Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] ". (($aStart) ? ('A['. $aStart .'] '): '') .")\n");
 
 		$this->zToSafe();
 
 		if ($this->a != $aStart) {
 			$this->a = $aStart;
 
-			fputs($this->fd, "G0 A{$aStart}\n");
+			$this->G0('a');
 		}
 
 		# Слева режем точно до грани болта
@@ -516,7 +524,7 @@ class Lathe4d
 			$this->zToSafe();
 
 			$this->a -= $params['aStep'];
-			fputs($this->fd, "G0 A{$this->a}\n");
+			$this->G0('a');
 		}
 
 		$this->aTo360();
@@ -531,8 +539,8 @@ class Lathe4d
 	 */
 	private function squareLevelSnake($xLeft, $xRight, $yBegin, $yEnd)
 	{
-		fputs($this->fd, "G0 X{$this->x} Y{$this->y}\n");
-		fputs($this->fd, "G1 Z{$this->z} F{$this->cutter->getFeed()}\n");
+		$this->G0('xy');
+		$this->G1('zf');
 
 		# При дробном кол-ве шагов yStepoverMm усредним
 		$yRange = $yEnd - $yBegin - $this->cutter->getDiameter();
@@ -554,7 +562,7 @@ class Lathe4d
 			}
 
 			// @todo за чистоту кода просится wasY и анализ его изменений (лишний кот)
-			fputs($this->fd, "G1 Y{$this->y}\n");
+			$this->G1('y');
 
 			if ($this->x == $xLeft) {
 				# девочки направо
@@ -565,7 +573,7 @@ class Lathe4d
 				$this->x = $xLeft;
 			}
 
-			fputs($this->fd, "G1 X{$this->x}\n");
+			$this->G1('x');
 
 		} while (!$yLast);
 	}
@@ -581,8 +589,8 @@ class Lathe4d
 	 */
 	private function squareLevelSideMill($xLeft, $xRight, $yBegin, $yEnd)
 	{
-		fputs($this->fd, "G0 X{$this->x} Y{$this->y}\n");
-		fputs($this->fd, "G1 Z{$this->z} F{$this->cutter->getFeed()}\n");
+		$this->G0('xy');
+		$this->G1('zf');
 
 		$xLast = false;
 
@@ -600,25 +608,25 @@ class Lathe4d
 			}
 
 			# "Врезались" в деталь на sideStep (0.1 мм, например)
-			fputs($this->fd, "G1 X{$this->x}\n");
+			$this->G1('x');
 
 			# Основной режущий проход
 			$this->y = $yBegin + $this->cutter->getRadius();
-			fputs($this->fd, "G1 Y{$this->y}\n");
+			$this->G1('y');
 
 			# Дорезка нижнего угла
 			$this->x += $this->cutter->getSideStep();
-			fputs($this->fd, "G1 X{$this->x}\n");
+			$this->G1('x');
 
 			# Чуть отведу фрезу (компенсация отгиба при резе)
 			$this->x += $this->cutter->getSideStep();
-			fputs($this->fd, "G0 X{$this->x}\n");
+			$this->G0('x');
 
 			# Холостой ход к началу реза
 			$this->y = $yEnd - $this->cutter->getRadius();
-			fputs($this->fd, "G0 Y{$this->y}\n");
+			$this->G0('y');
 			$this->x -= $this->cutter->getSideStep() * 2;
-			fputs($this->fd, "G0 X{$this->x}\n");
+			$this->G0('x');
 		} while (!$xLast);
 	}
 
@@ -654,7 +662,7 @@ class Lathe4d
 		$dBegin = ($params['dBegin'] < $params['dEnd']) ? $params['dEnd'] : $params['dBegin'];
 		$dEnd   = ($params['dBegin'] < $params['dEnd']) ? $params['dBegin'] : $params['dEnd'];
 
-		fputs($this->fd, "( Cylinder Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n");
+		fputs($this->fd, "\n( Cylinder Y[{$yBegin}..{$yEnd}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n");
 
 		if (($yEnd - $yBegin) == $this->cutter->getDiameter()) {
 			# Цилиндр через cutRight, а не cylinder из-за совпадения yRange с dCutter - так быстрее
@@ -671,11 +679,11 @@ class Lathe4d
 		$this->a = 0;
 		# Y=3, потому как с 0 + dФрезы / 2
 		$this->y = $yBegin + $this->cutter->getRadius();
-		fputs($this->fd, "G0 A0 X0 Y{$this->y}\n");
+		$this->G0('axy');
 
 		# начало прохода
 		$this->z = $dBegin/2;
-		fputs($this->fd, "G1 Z{$this->z} F{$this->cutter->getFeed()}\n");
+		$this->G1('zf');
 		$zLast = false;
 
 		do {
@@ -688,11 +696,11 @@ class Lathe4d
 
 			# врезание до заданной глубины за 10°
 			$this->a += 10;
-			fputs($this->fd, "G1 Z{$this->z} A{$this->a}\n");
+			$this->G1('za');
 
 			# начальный кружок на месте
 			$this->a += 360;
-			fputs($this->fd, "G1 A{$this->a}\n");
+			$this->G1('a');
 
 			if ($this->y == ($yBegin + $this->cutter->getRadius()) ) {
 				# прямой ход
@@ -706,16 +714,17 @@ class Lathe4d
 
 			# A=670, потому как один оборот за dФрезы * %% = 6*0.8 = 4.8. Пройти надо 10 - 0 - 6 = 4, то есть 4 / 4.8 * 360 = 300 градусов
 			$this->a += ($yEnd - $yBegin - $this->cutter->getDiameter()) / $this->cutter->getStepoverMm() * 360;
-			fputs($this->fd, "G1 Y{$this->y} A{$this->a}\n");
+			$this->G1('ya');
 
 			# кружок на месте
 			$this->a += 360;
-			fputs($this->fd, "G1 A{$this->a}\n");
+			$this->G1('a');
 
 		} while (!$zLast);
 
 		$this->zToSafe();
 		$this->aTo360();
+		$this->timeEstimateByA();
 		$this->aReset();
 	}
 
@@ -731,7 +740,7 @@ class Lathe4d
 		if ($this->a != (ceil($this->a / 360) * 360)) {
 			$this->a = ceil($this->a / 360) * 360;
 
-			fputs($this->fd, "G0 A{$this->a}\n");
+			$this->G0('a');
 		}
 	}
 
@@ -743,9 +752,14 @@ class Lathe4d
 	private function aReset()
 	{
 		if ($this->a == (ceil($this->a / 360) * 360) ) {
-			$this->a = 0;
+			fputs($this->fd, "G92 A 0".
+				($this->isDebug()
+					? "			( [rev=". abs(ceil($this->a / 360)) ."] )"
+					: ''
+				)
+				."\n");
 
-			fputs($this->fd, "G92 A 0\n");
+			$this->a = 0;
 		}
 	}
 
@@ -778,7 +792,7 @@ class Lathe4d
 			$yStep  = $out[2];
 		}
 
-		fputs($this->fd, "( Thread Y[{$yBegin}..{$yEnd} by {$yStep}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n");
+		fputs($this->fd, "\n( Thread Y[{$yBegin}..{$yEnd} by {$yStep}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] )\n");
 
 		$this->zToSafe();
 
@@ -786,13 +800,13 @@ class Lathe4d
 		$this->x = 0;
 		$this->y = $yBegin;
 		#1:
-		fputs($this->fd, "G0 A{$this->a} X0 Y{$this->y}\n");
+		$this->G0('axy');
 
 		$this->z = $dBegin/2;
 		$zLast = false;
 
 		# начало прохода
-		fputs($this->fd, "G1 Z{$this->z} F{$this->cutter->getFeed()}\n");
+		$this->G1('zf');
 
 		do {
 			$this->z -= $this->cutter->getPassDepth();
@@ -809,24 +823,24 @@ class Lathe4d
 				$this->a -= 10 * $direction;
 				#2: y=end, a=2x360 + резьба
 				# врезание до заданной глубины на A-=10
-				fputs($this->fd, "G1 Z{$this->z} A{$this->a}\n");
+				$this->G1('za');
 
 				$this->a -= 360 * $direction;
 				#2: y=end, a=360 + резьба
 				# кружок на месте налево
-				fputs($this->fd, "G1 A{$this->a}\n");
+				$this->G1('a');
 
 				$this->y = $yBegin;				# погнали налево крутя, ехать к началу
 
 				$this->a = 360 * $direction;
 				#2: y=begin, a=360
 				# крутим резьбу налево
-				fputs($this->fd, "G1 Y{$this->y} A{$this->a}\n");
+				$this->G1('ya');
 
 				# круг на месте и лишние 10° - для следующего врезания, если НЕ финальный проход
 				$this->a = ($this->z == ($dEnd/2)) ? 0 : (-10 * $direction);
 				#2: y=begin, a=-10 или a=0 при финальном
-				fputs($this->fd, "G1 A{$this->a}\n");
+				$this->G1('a');
 			}
 			else {
 				# прямой ход
@@ -835,23 +849,23 @@ class Lathe4d
 				$this->a += 10 * $direction;
 				#1: y=begin, a=0
 				# врезание до заданной глубины на A+=10
-				fputs($this->fd, "G1 Z{$this->z} A{$this->a}\n");
+				$this->G1('za');
 
 				$this->a += 360 * $direction;
 				#1: y=begin, a=360
 				# кружок на месте
-				fputs($this->fd, "G1 A{$this->a}\n");
+				$this->G1('a');
 
 				$this->y = $yEnd;
 				$this->a += ($yEnd - $yBegin) / $yStep * 360 * $direction;
 				#1: y=end, a=360 + резьба
 				# крутим резьбу
-				fputs($this->fd, "G1 Y{$this->y} A{$this->a}\n");
+				$this->G1('ya');
 
 				$this->a += (($this->z == ($dEnd/2)) ? 360 : 370) * $direction;
 				#1: y=end, a=2x360 + резьба + 10 (если НЕ финальный проход)
 				# кружок на месте
-				fputs($this->fd, "G1 A{$this->a}\n");
+				$this->G1('a');
 			}
 
 		} while (!$zLast);
@@ -902,7 +916,7 @@ class Lathe4d
 		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
 		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
 
-		fputs($this->fd, "( CutRight Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n");
+		fputs($this->fd, "\n( CutRight Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." zPassMode={$zPassMode} )\n");
 
 		$this->cut($y + $this->cutter->getRadius(), $dBegin, $dEnd, $direction, $zPassMode);
 	}
@@ -929,7 +943,7 @@ class Lathe4d
 		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
 		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
 
-		fputs($this->fd, "( CutLeft Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n");
+		fputs($this->fd, "\n( CutLeft Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n");
 
 		$this->cut($y - $this->cutter->getRadius(), $dBegin, $dEnd, $direction, $zPassMode);
 	}
@@ -957,7 +971,7 @@ class Lathe4d
 		$direction = isset($params['direction']) ? $params['direction'] : self::$CUT_DIR_RIGHT;
 		$zPassMode = isset($params['zPassMode']) ? $params['zPassMode'] : self::$CUT_ZPASS_CENTER;
 
-		fputs($this->fd, "( CutCenter Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n");
+		fputs($this->fd, "\n( CutCenter Y[{$y}] D[{$dBegin}..{$dEnd}]=R[". $dBegin / 2 ."..". $dEnd / 2 ."] Direction=". (($direction == self::$CUT_DIR_RIGHT) ? 'RIGHT' : 'LEFT') ." )\n");
 
 		$this->cut($y, $dBegin, $dEnd, $direction, $zPassMode);
 	}
@@ -981,10 +995,10 @@ class Lathe4d
 		$this->x = 0;
 		$this->a = 0;
 		$this->y = $y;
-		fputs($this->fd, "G0 X0 A0 Y{$this->y}\n");
+		$this->G0('axy');
 
 		$this->z = $dBegin/2;
-		fputs($this->fd, "G1 Z{$this->z} F{$this->cutter->getFeed()}\n");
+		$this->G1('zf');
 		# Фрезу подвели к началу
 
 		switch ($zPassMode) {
@@ -992,7 +1006,7 @@ class Lathe4d
 				# Спиралью опустил до $dEnd
 				$this->z = $dEnd/2;
 				$this->a = ($dBegin/2 - $dEnd/2) / $this->cutter->getPassDepth() * 360 * $direction;
-				fputs($this->fd, "G1 A{$this->a} Z{$this->z}\n");
+				$this->G1('az');
 				break;
 
 			case self::$CUT_ZPASS_HALF:
@@ -1011,12 +1025,31 @@ class Lathe4d
 		if ($this->z > 0) {
 			# Круг почёта на месте (не нужен, если уже r=0)
 			$this->a += 360 * $direction;
-			fputs($this->fd, "G1 A{$this->a}\n");
+			$this->G1('a');
 		}
 
 		$this->zToSafe();
 		$this->aTo360();
+		$this->timeEstimateByA();
 		$this->aReset();
+	}
+
+
+	/**
+	 * Сколько времени займёт, судя по кол-ву оборотов и feed
+	 */
+	private function timeEstimateByA()
+	{
+		if ($this->isDebug() and ($this->a != 0)) {
+			$time = round(abs($this->a) / $this->cutter->getFeed() * 60);
+
+			$hour = floor($time / 3600);
+			$time -= $hour * 3600;
+			$min  = floor($time / 60);
+			$sec  = $time - $min * 60;
+
+			fputs($this->fd, "( time estimate: ". sprintf('%02d:%02d:%02d', $hour, $min, $sec) ." )\n");
+		}
 	}
 
 
@@ -1029,7 +1062,7 @@ class Lathe4d
 			# Стандартный режим
 			$this->z = $rEndStandart;
 			$this->a = ($rBegin - $rEndStandart) / $this->cutter->getPassDepth() * 360 * $direction;
-			fputs($this->fd, "G1 A{$this->a} Z{$this->z}\n");
+			$this->G1('az');
 		}
 
 		while ($this->z > $rEnd) {
@@ -1049,7 +1082,7 @@ class Lathe4d
 
 			$this->a += 360 * $direction; 	# Один оборот дальше
 			$this->z -= $passDepth;			# Вычисленное заглубление
-			fputs($this->fd, "G1 A{$this->a} Z{$this->z}\n");
+			$this->G1('az');
 		}
 	}
 
@@ -1077,7 +1110,7 @@ class Lathe4d
 		$this->z = $this->blank->getRadius() + $this->safe;
 		# ex: заготовка 50/2 + safe 10 = 35
 
-		fputs($this->fd, "G0 Z{$this->z}\n");
+		$this->G0('z');
 	}
 
 
@@ -1088,6 +1121,37 @@ class Lathe4d
 	private function isSafeZ()
 	{
 		return !! ($this->z == ($this->blank->getRadius() + $this->safe));
+	}
+
+
+	private function G0($axis)
+	{
+		return $this->GoGo('0', $axis);
+	}
+	private function G1($axis)
+	{
+		return $this->GoGo('1', $axis);
+	}
+	private function GoGo($mode, $axis)
+	{
+		$ret = ['G'. $mode];
+
+		foreach (str_split($axis) as $item) {
+			switch ($item) {
+				case 'x':
+				case 'y':
+				case 'z':
+				case 'a':
+					$ret[] = strtoupper($item) . round($this->{$item}, 4);
+					break;
+
+				case 'f':
+					$ret[] = 'F'. $this->cutter->getFeed();
+					break;
+			}
+		}
+
+		fputs($this->fd, join(' ', $ret) ."\n");
 	}
 
 }
