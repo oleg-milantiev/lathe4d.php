@@ -701,7 +701,7 @@ class Lathe4d
 		if ($this->a == (ceil($this->a / 360) * 360) ) {
 			$this->a = 0;
 
-			return "G92 A 0\n";
+			fputs($this->fd, "G92 A 0\n");
 		}
 	}
 
@@ -1078,7 +1078,7 @@ class Lathe4d
 		$this->z = $this->blank->getRadius() + $this->safe;
 		# ex: заготовка 50/2 + safe 10 = 35
 
-		return "G0 Z{$this->z}\n";
+		fputs($this->fd, "G0 Z{$this->z}\n");
 	}
 
 
