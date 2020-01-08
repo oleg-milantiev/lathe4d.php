@@ -415,6 +415,12 @@ class Lathe4d
 					$xLeft = $xLeftBolt;
 				}
 
+				# Для шестигранника (и, тем более, для более "гранников") левую границу нужно сдвигать
+				# правее, чтобы не резать воздух
+				if ( ($face > 1) and ($params['aStep'] < 90) and ($this->z != ($dEnd/2))) {
+					$xLeft += ($this->z - $dEnd/2) * tan(pi() / 180 * (90 - $params['aStep']) );
+				}
+
 				# Правая граница цилиндра dBegin по X на этой высоте
 				$xRight = sqrt($dBegin / 2 * $dBegin / 2 - $this->z * $this->z);
 
@@ -434,7 +440,7 @@ class Lathe4d
 
 			$ret .= $this->zToSafe();
 
-			$this->a += $params['aStep'];
+			$this->a -= $params['aStep'];
 			$ret .= "G0 A{$this->a}\n";
 		}
 
@@ -465,8 +471,6 @@ class Lathe4d
 
 		# Цикл по Y
 		do {
-			# @todo равномерно разделить проходы по Y
-			# @todo Пример: 21 +[4.8] = 25.8 +[1.2] = 27. А надо ряд 21, 24, 27 (по 3мм)
 			$this->y -= $yStepoverMm;
 
 			if ($this->y < ($yBegin + $this->cutter->getRadius())) {
@@ -512,6 +516,8 @@ class Lathe4d
 		# Цикл по X налево
 		do {
 			$this->x -= $this->cutter->getSideStep();
+			// @todo хорошо б сделать адаптивный по ширине рез. Оставляя при этом тот же объём
+			// То есть, в начале (наверху) цилиндра можно брать увереннее при той же нагрузке на станок
 
 			if ($this->x < $xLeft) {
 				# Последний проход
@@ -587,6 +593,8 @@ class Lathe4d
 
 		$ret .= $this->zToSafe();
 
+		$this->x = 0;
+		$this->a = 0;
 		# Y=3, потому как с 0 + dФрезы / 2
 		$this->y = $yBegin + $this->cutter->getRadius();
 		$ret .= "G0 A0 X0 Y{$this->y}\n";
@@ -701,6 +709,7 @@ class Lathe4d
 		$ret .= $this->zToSafe();
 
 		$this->a = -10 * $direction;
+		$this->x = 0;
 		$this->y = $yBegin;
 		#1:
 		$ret .= "G0 A{$this->a} X0 Y{$this->y}\n";
@@ -944,8 +953,10 @@ class Lathe4d
 
 		$ret .= $this->zToSafe();
 
+		$this->x = 0;
+		$this->a = 0;
 		$this->y = $y;
-		$ret .= "G0 A0 Y{$this->y}\n";
+		$ret .= "G0 X0 A0 Y{$this->y}\n";
 
 		$this->z = $dBegin/2;
 		$ret .= "G1 Z{$this->z} F{$this->cutter->getFeed()}\n";
