@@ -632,6 +632,160 @@ class Lathe4d
 
 
 	/**
+	 * Был квадрат, размером params['d']. Нужно сделать цилиндр того же диаметра
+	 * @todo Сейчас поддерживает только sideMill
+	 *
+	 * @param $params array Массив параметров: yBegin, yEnd, d, [aStart]
+	 */
+	public function squareToCylinder($params)
+	{
+		die('@todo');
+		if (!$this->cutter) {
+			die('ERROR: Cutter not defined');
+		}
+
+		if (!isset($params['yBegin']) or !isset($params['yEnd']) or !isset($params['d'])) {
+			die('ERROR: Mandatory parameters are not defined: yBegin, yEnd, d');
+		}
+
+		# Делаем yBegin < $yEnd, как бы их не задали
+		$yBegin = ($params['yBegin'] < $params['yEnd']) ? $params['yBegin'] : $params['yEnd'];
+		$yEnd   = ($params['yBegin'] < $params['yEnd']) ? $params['yEnd'] : $params['yBegin'];
+
+		if (($yEnd - $yBegin) < $this->cutter->getDiameter()) {
+			die('ERROR: Cutter cant fit into SquareToCylinder length');
+		}
+
+		if (isset($params['sideMill'])) {
+			if (!$this->cutter->getSideDepth() or !$this->cutter->getSideStep()) {
+				die('ERROR: Cant sideMill with this cutter (not defined side* properties)');
+			}
+		}
+		else {
+			die('ERROR: now support only sideMill, sorry');
+		}
+
+		$d = $params['d'];
+		$aStart = isset($params['aStart']) ? $params['aStart'] : 0;
+
+		fputs($this->fd, "\n( SquareToCylinder Y[{$yBegin}..{$yEnd}] D[{$d}]=R[". $d / 2 ."] ". (($aStart) ? ('A['. $aStart .'] '): '') .")\n");
+
+		$this->zToSafe();
+
+		$this->x = 0;
+		$this->G0('x');
+
+		for ($face = 1; $face <= 4; $face ++) {
+
+			if ($this->isInfo()) {
+				fputs($this->fd, "( SquareToCylinder - Face #{$face} )\n");
+			}
+
+			$this->z = ($d * sqrt(2)) / 2;
+			$zLast = false;
+
+			do {
+
+				$this->z -= isset($params['sideMill'])
+					? $this->cutter->getSideDepth()
+					: $this->cutter->getPassDepth();
+
+				if ($this->z < ($d / 2)) {
+					# последний проход
+					$this->z = $d / 2;
+					$zLast = true;
+				}
+
+				$a = (pi() / 2 - 2 * acos($d/2 / $this->z)) / 2 / pi() * 180;
+				$aRight = 45 + $aStart + ($face-1) * 90 + $a;
+				$aLeft  = 45 + $aStart + ($face-1) * 90 - $a;
+
+				if ($this->isDebug()) {
+					fputs($this->fd, "( SquareToCylinder - Face #{$face} - CylinderPart A[{$aLeft}..{$aRight}] Y[{$yBegin}..{$yEnd}] Z[{$this->z}] )\n");
+				}
+
+				# Длина окружности на этом радиусе = pi * d
+				$circleLength = pi() * 2 * $this->z;
+
+				# Врезание справа, правее цилиндра подвести и погнали налево
+				$this->a = $aRight + $this->cutter->getRadius() / $circleLength * 360;
+				$this->y = $yEnd - $this->cutter->getRadius();
+
+				$this->G0('ay');
+				$this->G1('zf');
+
+				if (isset($params['sideMill'])) {
+					$this->CylinderPartLevelSideMill($aLeft, $aRight, $yBegin, $yEnd);
+				}
+				else {
+					$this->cylinderPartLevelSnake(   $aLeft, $aRight, $yBegin, $yEnd);
+				}
+
+				$this->a = $aRight + $this->cutter->getRadius() / $circleLength * 360;
+				$this->G0('a');
+
+			} while (!$zLast);
+
+			$this->zToSafe();
+		}
+
+		$this->aTo360();
+		$this->aReset();
+	}
+
+	/**
+	 * @todo implement
+	 * @param $aLeft
+	 * @param $aRight
+	 * @param $yBegin
+	 * @param $yEnd
+	 */
+	private function CylinderPartLevelSideMill($aLeft, $aRight, $yBegin, $yEnd)
+	{
+		die('ERROR: not implemented yet. Use without sideMill yet');
+	}
+
+	/**
+	 * Срез куска цилиндра от aLeft до aRight (X = 0 при этом). От yBegin до yEnd
+	 * Изначально фреза находится правее (по A) среза. Уже на нужной Z. В Y близко к yEnd
+	 *
+	 * @param $aLeft
+	 * @param $aRight
+	 * @param $yBegin
+	 * @param $yEnd
+	 */
+	private function CylinderPartLevelSnake($aLeft, $aRight, $yBegin, $yEnd)
+	{
+		$yLast = false;
+
+		$this->y += $this->cutter->getStepoverMm();
+
+		do {
+			$this->y -= $this->cutter->getStepoverMm();
+
+			if ($this->y <= ($yBegin + $this->cutter->getRadius()) ) {
+				$this->y = $yBegin + $this->cutter->getRadius();
+				$yLast = true;
+			}
+
+			$this->G1('y');
+
+			if ($this->a == $aLeft) {
+				# Режем направо
+				$this->a = $aRight;
+			}
+			else {
+				# Режем налево
+				$this->a = $aLeft;
+			}
+
+			$this->G1('a');
+
+		} while (!$yLast);
+	}
+
+
+	/**
 	 * Цилиндр
 	 *
 	 * @param $params array Массив параметров: dBegin, dEnd, yBegin, yEnd
